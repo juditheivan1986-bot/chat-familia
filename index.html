@@ -339,7 +339,7 @@
         <h2 id="groupNameLabel">Chats</h2>
         <button class="icon-btn" id="chatMenuBtn" aria-label="Opciones del chat" style="display:none; font-size:16px;">✏️</button>
       </div>
-      <div class="me-chip"><span id="meLabel"></span><button class="icon-btn" id="settingsBtn" aria-label="Ajustes">⚙️</button></div>
+      <div class="me-chip"><span id="cloudDot" style="font-size:11px; cursor:help;" title="Conexión con el servidor"></span><span id="meLabel"></span><button class="icon-btn" id="settingsBtn" aria-label="Ajustes">⚙️</button></div>
     </div>
 
     <div class="tab-content active" id="chatTab">
@@ -792,9 +792,20 @@
       var text = !window.mqtt ? "⚪ Sin conexión al servidor: los chats solo se guardan en este aparato." :
         connected ? "🟢 Conectada: los chats se comparten entre todos los aparatos." : "🟠 Conectando con el servidor…";
       document.querySelectorAll(".cloud-status").forEach(function (el) { el.textContent = text; });
+      var dot = document.getElementById("cloudDot");
+      if (dot) { dot.textContent = !window.mqtt ? "⚪" : connected ? "🟢" : "🟠"; dot.title = text; }
     }
 
+    var triedAlt = false;
     function connect() {
+      if (!window.mqtt && !triedAlt) {
+        // Plan B: si algún bloqueador impidió cargar la librería, se prueba desde otro sitio
+        triedAlt = true;
+        var s = document.createElement("script");
+        s.src = "https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js";
+        s.onload = function () { connect(); sync(); };
+        document.head.appendChild(s);
+      }
       if (client || !window.mqtt) { status(); return; }
       try {
         client = mqtt.connect(BROKER, { clientId: "cf_" + rid() + rid(), keepalive: 30, reconnectPeriod: 3000, connectTimeout: 10000, clean: true });
@@ -806,7 +817,15 @@
       client.on("message", onMessage);
       status();
     }
-    function subscribeAll(base) { client.subscribe([base + "/state", base + "/live", base + "/media/+", base + "/stories"], { qos: 1 }); }
+    function subscribeAll(base) {
+      client.subscribe([base + "/state", base + "/live", base + "/media/+", base + "/stories"], { qos: 1 });
+      // Si el servidor no tiene este chat (se creó sin conexión o se perdió), lo subimos nosotros
+      setTimeout(function () {
+        if (received[base] || !connected) return;
+        var c = chatOf(base);
+        if (c && identityFor(c.id)) { received[base] = 1; publishNow(c.id); }
+      }, 4000);
+    }
     function watch(base) { if (!base || subs[base]) return; subs[base] = 1; if (client && connected) subscribeAll(base); }
     function sync() {
       var want = {}; myBases().forEach(function (b) { want[b] = 1; });
