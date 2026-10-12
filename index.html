@@ -325,7 +325,9 @@
       <div class="welcome-btns">
         <button class="btn-primary" id="welcomeCreateBtn">＋ Crear chat</button>
         <button class="btn-primary secondary" id="welcomeJoinBtn">🔑 Entrar en un chat</button>
+        <button class="btn-primary secondary" id="welcomeImportBtn">📂 Cargar una copia</button>
       </div>
+      <p class="lead" id="welcomeNote" style="margin:16px 0 0; font-size:13px;">Los chats se guardan en cada aparato. Si los creaste en otro sitio, cárgalos aquí con «Cargar una copia».</p>
     </div>
   </div>
 
@@ -749,6 +751,13 @@
     initChatModal(); initSettings(); initStories();
     $("welcomeCreateBtn").onclick = function () { openChatModal("create"); };
     $("welcomeJoinBtn").onclick = function () { openChatModal("join"); };
+    $("welcomeImportBtn").onclick = function () { $("importFile").click(); };
+    // Si el navegador no deja guardar nada, avisarlo claro en vez de fallar en silencio
+    var canStore = saveJSON("cf_test", 1); try { localStorage.removeItem("cf_test"); } catch (e) {}
+    if (!canStore) {
+      $("welcomeNote").textContent = "⚠️ Este navegador no deja guardar datos en esta página, así que la app no puede funcionar. Revisa que no estés en modo privado y que no tengas bloqueados los datos de los sitios.";
+      $("welcomeNote").style.color = "#C0392B";
+    }
     if (getMine().length) boot(); else showScreen("welcomeScreen");
   }
 
@@ -962,21 +971,34 @@
     if ((chatMode !== "edit" || pass) && pass.length < 3) { err.textContent = "La contraseña tiene que tener al menos 3 letras o números."; $("chatPassInput").focus(); return; }
     var sameName = getDB().chats.filter(function (c) { return c.name.toLowerCase() === name.toLowerCase() && (!editingChat || c.id !== editingChat.id); });
 
-    if (chatMode === "create") {
-      if (sameName.length) { err.textContent = "Ya hay un chat con ese nombre. Elige otro, o usa «Entrar en un chat»."; return; }
+    function createNow() {
       hashPass(pass).then(function (h) {
         var d = getDB(), now = new Date().toISOString(), id = rid() + rid();
         var user = findOrCreateProfile(d, userName, pickedColor);
         d.chats.push({ id: id, name: name, emoji: pickedEmoji, pass_hash: h, created_by: user.id, created_at: now });
         d.chat_members.push({ chat_id: id, user_id: user.id, joined_at: now });
-        if (!saveDB(d)) return;
+        if (!saveDB(d)) { err.textContent = "Este navegador no deja guardar datos en esta página. Revisa que no estés en modo privado y que no tengas bloqueados los datos de los sitios."; return; }
         enterChat(id, user);
       });
-    } else if (chatMode === "join") {
-      if (!sameName.length) { err.textContent = "No hay ningún chat con ese nombre. Revisa cómo está escrito."; return; }
+    }
+
+    var mode = chatMode;
+    if (mode === "create") {
+      if (!sameName.length) { createNow(); return; }
+      // Ese chat ya existe: si la contraseña es la suya, se entra directamente
+      mode = "join";
+    } else if (mode === "join" && !sameName.length) {
+      // Los chats se guardan en cada aparato: si aquí no existe, se ofrece crearlo
+      askConfirm("En este aparato todavía no hay ningún chat llamado «" + name + "». ¿Quieres crearlo ahora con esa contraseña?", "Crear chat", createNow, null, true);
+      return;
+    }
+    if (mode === "join") {
       hashPass(pass).then(function (h) {
         var c = sameName[0];
-        if (c.pass_hash !== h) { err.textContent = "La contraseña no es correcta."; $("chatPassInput").select(); return; }
+        if (c.pass_hash !== h) {
+          err.textContent = chatMode === "create" ? "Ya hay un chat con ese nombre y la contraseña no coincide. Pon su contraseña para entrar, o elige otro nombre." : "La contraseña no es correcta.";
+          $("chatPassInput").select(); return;
+        }
         var d = getDB(), user = findOrCreateProfile(d, userName, pickedColor);
         if (!d.chat_members.some(function (m) { return m.chat_id === c.id && m.user_id === user.id; })) d.chat_members.push({ chat_id: c.id, user_id: user.id, joined_at: new Date().toISOString() });
         if (!saveDB(d)) return;
