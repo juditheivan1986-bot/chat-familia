@@ -327,7 +327,8 @@
         <button class="btn-primary secondary" id="welcomeJoinBtn">🔑 Entrar en un chat</button>
         <button class="btn-primary secondary" id="welcomeImportBtn">📂 Cargar una copia</button>
       </div>
-      <p class="lead" id="welcomeNote" style="margin:16px 0 0; font-size:13px;">Los chats se guardan en cada aparato. Si los creaste en otro sitio, cárgalos aquí con «Cargar una copia».</p>
+      <p class="lead" id="welcomeNote" style="margin:16px 0 0; font-size:13px;">Cualquiera que ponga el mismo nombre de chat y contraseña, desde cualquier móvil u ordenador, entra en el mismo chat.</p>
+      <p class="lead cloud-status" style="margin:8px 0 0; font-size:12.5px;"></p>
     </div>
   </div>
 
@@ -438,6 +439,11 @@
         <button class="btn-primary secondary" id="importBtn">📂 Cargar copia</button>
         <input type="file" id="importFile" accept=".json,application/json" style="display:none;">
         <div class="hint">Todo se guarda en este aparato. Descarga una copia de vez en cuando para no perder nada.</div>
+      </div>
+      <div class="modal-section">
+        <div class="label">Servidor</div>
+        <div class="hint cloud-status" style="margin-top:0;"></div>
+        <div class="hint">Es un servidor público de prueba: perfecto para enseñar la app, pero mejor no mandar cosas privadas de verdad.</div>
       </div>
       <div class="modal-section">
         <button class="btn-primary secondary" id="logoutBtn">🚪 Cerrar sesión</button>
@@ -614,6 +620,8 @@
   <div class="toast" id="toast"></div>
 </div>
 
+<!-- Para hablar con el servidor de prueba compartido (si no carga, la app funciona solo en este aparato) -->
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script>
 (function () {
   "use strict";
@@ -727,17 +735,351 @@
   // ===== AVISOS ENTRE PESTAÑAS (lo que pasa en una se ve en directo en las otras) =====
   var TAB_ID = rid() + rid();
   var bus = (function () {
-    var handlers = [], ch = null;
+    var handlers = [], ch = null, seen = {}, seenList = [];
     function dispatch(m) {
       if (!m || m.from === TAB_ID) return;
       if (m.to && m.to !== TAB_ID) return;
+      // El mismo aviso puede llegar por la pestaña y por el servidor: solo se atiende una vez
+      if (m.mid) { if (seen[m.mid]) return; seen[m.mid] = 1; seenList.push(m.mid); if (seenList.length > 800) delete seen[seenList.shift()]; }
       handlers.forEach(function (h) { h(m); });
     }
     try { ch = new BroadcastChannel("chat-familiar"); ch.onmessage = function (e) { dispatch(e.data); }; } catch (e) { ch = null; }
     if (!ch) window.addEventListener("storage", function (e) { if (e.key === "cf_bus" && e.newValue) { try { dispatch(JSON.parse(e.newValue)); } catch (x) {} } });
     return {
-      send: function (m) { m.from = TAB_ID; if (ch) ch.postMessage(m); else { m.n = rid(); try { localStorage.setItem("cf_bus", JSON.stringify(m)); } catch (e) {} } },
+      send: function (m) {
+        m.from = TAB_ID; m.mid = rid() + rid();
+        if (ch) ch.postMessage(m); else { try { localStorage.setItem("cf_bus", JSON.stringify(m)); } catch (e) {} }
+        cloud.live(m);
+      },
+      inject: dispatch,
       on: function (h) { handlers.push(h); }
+    };
+  })();
+
+  function sha256hex(text) {
+    if (window.crypto && crypto.subtle && window.TextEncoder) {
+      return crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)).then(function (buf) {
+        return Array.prototype.map.call(new Uint8Array(buf), function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+      });
+    }
+    var h1 = 5381, h2 = 52711;
+    for (var i = 0; i < text.length; i++) { var ch = text.charCodeAt(i); h1 = (h1 * 33) ^ ch; h2 = (h2 * 33) ^ ch; }
+    return Promise.resolve(((h1 >>> 0).toString(16) + (h2 >>> 0).toString(16)).padStart(40, "0"));
+  }
+
+  // ===== SERVIDOR DE PRUEBA COMPARTIDO (MQTT público, sin cuentas ni base de datos) =====
+  // Cada chat se guarda como un JSON en una "dirección" secreta que sale de su nombre + contraseña.
+  // Quien pone el mismo nombre y contraseña llega a la misma dirección y ve el mismo chat.
+  //   <dir>/state       JSON del chat (mensajes ligeros, dibujos, miembros, borrados) — se queda guardado
+  //   <dir>/media/<id>  la foto, audio, GIF o vídeo de cada mensaje — se queda guardado
+  //   <dir>/stories     las stories de la gente del chat — se queda guardado
+  //   <dir>/live        avisos al momento: dibujo en directo, quién está conectado, llamadas
+  var cloud = (function () {
+    var BROKER = "wss://broker.emqx.io:8084/mqtt", ROOT = "chat-familiar/v1/";
+    var LIVE = { here: 1, hello: 1, bye: 1, offer: 1, answer: 1, ice: 1, reject: 1, busy: 1, end: 1,
+                 "stroke-start": 1, "stroke-pts": 1, "stroke-end": 1, "stroke-undo": 1, "stroke-clear": 1, profile: 1 };
+    var MAX_MEDIA = 1400000, MAX_MSGS = 300, MAX_STROKES = 400;
+    var client = null, connected = false, subs = {}, waiters = {}, timers = {}, storyCache = {}, pendingMedia = {};
+
+    function topicFor(name, pass) { return sha256hex("cfam|" + name.trim().toLowerCase() + "|" + pass).then(function (h) { return ROOT + h.slice(0, 40); }); }
+    function chatOf(base, d) { return (d || getDB()).chats.filter(function (c) { return c.topic === base; })[0] || null; }
+    function myBases() {
+      var d = getDB(), out = {};
+      getMine().forEach(function (m) { var c = chatById(m.chat, d); if (c && c.topic) out[c.topic] = 1; });
+      return Object.keys(out);
+    }
+    function status() {
+      var text = !window.mqtt ? "⚪ Sin conexión al servidor: los chats solo se guardan en este aparato." :
+        connected ? "🟢 Conectada: los chats se comparten entre todos los aparatos." : "🟠 Conectando con el servidor…";
+      document.querySelectorAll(".cloud-status").forEach(function (el) { el.textContent = text; });
+    }
+
+    function connect() {
+      if (client || !window.mqtt) { status(); return; }
+      try {
+        client = mqtt.connect(BROKER, { clientId: "cf_" + rid() + rid(), keepalive: 30, reconnectPeriod: 3000, connectTimeout: 10000, clean: true });
+      } catch (e) { client = null; status(); return; }
+      client.on("connect", function () { connected = true; Object.keys(subs).forEach(subscribeAll); status(); });
+      client.on("close", function () { connected = false; status(); });
+      client.on("offline", function () { connected = false; status(); });
+      client.on("error", function () {});
+      client.on("message", onMessage);
+      status();
+    }
+    function subscribeAll(base) { client.subscribe([base + "/state", base + "/live", base + "/media/+", base + "/stories"], { qos: 1 }); }
+    function watch(base) { if (!base || subs[base]) return; subs[base] = 1; if (client && connected) subscribeAll(base); }
+    function sync() {
+      var want = {}; myBases().forEach(function (b) { want[b] = 1; });
+      Object.keys(subs).forEach(function (b) {
+        if (!want[b]) { delete subs[b]; if (client) client.unsubscribe([b + "/state", b + "/live", b + "/media/+", b + "/stories"]); }
+      });
+      Object.keys(want).forEach(watch);
+    }
+
+    // Busca si en esa dirección ya hay un chat guardado. undefined = sin conexión, null = no hay nada
+    function find(base, ms) {
+      return new Promise(function (res) {
+        if (!client || !connected) { res(undefined); return; }
+        var done = false;
+        function fin(v) { if (done) return; done = true; delete waiters[base]; res(v); }
+        waiters[base] = fin;
+        client.subscribe(base + "/state", { qos: 1 }, function (err) { if (err) fin(undefined); });
+        setTimeout(function () { fin(null); }, ms || 4000);
+      });
+    }
+
+    function onMessage(topic, payload) {
+      var parts = topic.split("/"), base = parts.slice(0, 3).join("/"), kind = parts[3], text = payload.toString();
+      if (kind === "state") {
+        var st = null; try { st = text ? JSON.parse(text) : null; } catch (e) {}
+        received[base] = 1;
+        if (waiters[base]) waiters[base](st);
+        if (st) applyState(base, st);
+      } else if (kind === "live") {
+        try { var m = JSON.parse(text); if (m && m.from !== TAB_ID) bus.inject(m); } catch (e) {}
+      } else if (kind === "media" && parts[4] && text) {
+        applyMedia(base, parts.slice(4).join("/"), text);
+      } else if (kind === "stories" && text) {
+        try { applyStories(base, JSON.parse(text)); } catch (e) {}
+      }
+    }
+
+    function live(m) {
+      if (!client || !connected || !LIVE[m.type]) return;
+      var bases;
+      if (m.chatId) { var c = chatById(m.chatId); bases = c && c.topic ? [c.topic] : []; }
+      else bases = myBases();
+      var s = JSON.stringify(m);
+      bases.forEach(function (b) { client.publish(b + "/live", s, { qos: 0 }); });
+    }
+
+    // ---- lo que se manda: el chat como JSON (sin fotos/audios, que van aparte) ----
+    function slimMsg(m) {
+      var o = { id: m.id, user_id: m.user_id, name: m.name, color: m.color, created_at: m.created_at };
+      ["text", "sticker", "stickerImg", "dur", "vtype"].forEach(function (k) { if (m[k] !== undefined) o[k] = m[k]; });
+      var media = m.image ? "image" : m.audio ? "audio" : m.gif ? "gif" : (m.video && !m.vlocal) ? "video" : m.pending || null;
+      if (media) o.media = media;
+      if (m.vlocal) o.vlocal = true;
+      return o;
+    }
+    function buildState(chatId) {
+      var d = getDB(), c = chatById(chatId, d); if (!c) return null;
+      var memberIds = {}; d.chat_members.forEach(function (m) { if (m.chat_id === chatId) memberIds[m.user_id] = 1; });
+      return {
+        v: 1,
+        chat: { id: c.id, name: c.name, emoji: c.emoji, pass_hash: c.pass_hash, created_by: c.created_by, created_at: c.created_at, updated_at: c.updated_at || c.created_at },
+        members: d.profiles.filter(function (p) { return memberIds[p.id]; }).map(function (p) { return { id: p.id, name: p.name, color: p.color, photo: p.photo || null }; }),
+        messages: d.messages.filter(function (m) { return m.chat_id === chatId; }).slice(-MAX_MSGS).map(slimMsg),
+        strokes: d.strokes.filter(function (s) { return s.chat_id === chatId; }).slice(-MAX_STROKES),
+        dead: { m: Object.keys((c.dead && c.dead.m) || {}), s: Object.keys((c.dead && c.dead.s) || {}) },
+        clearedAt: c.clearedAt || 0
+      };
+    }
+    function publishNow(chatId) {
+      var c = chatById(chatId); if (!client || !c || !c.topic) return;
+      var st = buildState(chatId); if (!st) return;
+      client.publish(c.topic + "/state", JSON.stringify(st), { qos: 1, retain: true });
+    }
+    // Hasta recibir lo que ya hay en el servidor se espera un poco, para no pisarlo con una versión a medias
+    var received = {};
+    function changed(chatId) {
+      var c = chatById(chatId); if (!client || !c || !c.topic) return;
+      clearTimeout(timers[chatId]);
+      timers[chatId] = setTimeout(function () { publishNow(chatId); }, received[c.topic] ? 250 : 3000);
+    }
+    function publishAll() { var d = getDB(); getMine().forEach(function (m) { var c = chatById(m.chat, d); if (c && c.topic) changed(c.id); }); }
+
+    function pubMedia(base, id, text) { if (client) client.publish(base + "/media/" + id, text, { qos: 1, retain: true }); }
+    function sendMedia(chatId, row) {
+      var c = chatById(chatId); if (!client || !c || !c.topic) return;
+      if (row.image) pubMedia(c.topic, row.id, row.image);
+      else if (row.audio) pubMedia(c.topic, row.id, row.audio);
+      else if (row.gif) mediaGet(row.gif).then(function (g) { if (g) pubMedia(c.topic, row.id, JSON.stringify(g)); });
+      else if (row.video && !row.vlocal) mediaGet(row.video).then(function (blob) {
+        if (!blob) return;
+        var r = new FileReader(); r.onload = function () { pubMedia(c.topic, row.id, r.result); }; r.readAsDataURL(blob);
+      });
+    }
+    function dropMedia(chatId, id) { var c = chatById(chatId); if (client && c && c.topic) client.publish(c.topic + "/media/" + id, "", { qos: 1, retain: true }); }
+
+    // ---- lo que llega: juntar el JSON del servidor con lo que hay en este aparato ----
+    function fillMedia(row, kind, text) {
+      delete row.pending;
+      if (kind === "image") { row.image = text; return Promise.resolve(); }
+      if (kind === "audio") { row.audio = text; return Promise.resolve(); }
+      if (kind === "gif") {
+        var g; try { g = JSON.parse(text); } catch (e) { return Promise.resolve(); }
+        var gid = "g" + rid() + rid(); row.gif = gid;
+        return mediaPut(gid, g).then(function () { delete gifCache[gid]; }, function () {});
+      }
+      if (kind === "video") {
+        var vid = "v" + rid() + rid(); row.video = vid;
+        return mediaPut(vid, dataUrlToBlob(text)).then(function () { delete mediaURLs[vid]; }, function () {});
+      }
+      return Promise.resolve();
+    }
+    function applyMedia(base, id, text) {
+      var d = getDB(), c = chatOf(base, d);
+      var row = c && d.messages.filter(function (m) { return m.chat_id === c.id && String(m.id) === id; })[0];
+      if (!row || !row.pending) { if (!row) pendingMedia[base + "/" + id] = text; return; }
+      fillMedia(row, row.pending, text).then(function () {
+        var d2 = getDB(), r2 = d2.messages.filter(function (m) { return m.chat_id === c.id && String(m.id) === id; })[0];
+        if (!r2) return;
+        ["image", "audio", "gif", "video"].forEach(function (k) { if (row[k]) r2[k] = row[k]; });
+        delete r2.pending;
+        saveDB(d2);
+        if (currentChat === c.id) renderAllMessages(); else renderChatsHome();
+      });
+    }
+
+    function removeLocalChat(chatId, d) {
+      d.messages.forEach(function (m) { if (m.chat_id === chatId && m.video) mediaDel(m.video); });
+      d.chats = d.chats.filter(function (x) { return x.id !== chatId; });
+      ["chat_members", "messages", "strokes"].forEach(function (t) { d[t] = d[t].filter(function (r) { return r.chat_id !== chatId; }); });
+    }
+
+    function applyState(base, st) {
+      var d = getDB(), c = chatOf(base, d);
+      if (st.deleted || st.moved) {
+        if (!c) return;
+        var name = c.name;
+        removeLocalChat(c.id, d); saveDB(d);
+        var wasMine = !!identityFor(c.id);
+        forgetChat(c.id); sync();
+        if (wasMine && booted) {
+          afterMineChanged();
+          toast(st.moved ? "La contraseña o el nombre del chat «" + name + "» ha cambiado. Vuelve a entrar con los nuevos." : "El chat «" + name + "» se ha borrado");
+        }
+        return;
+      }
+      if (!st.chat) return;
+      if (!c) {
+        c = chatById(st.chat.id, d);
+        if (!c) { c = { id: st.chat.id, name: st.chat.name, emoji: st.chat.emoji, pass_hash: st.chat.pass_hash, created_by: st.chat.created_by, created_at: st.chat.created_at, updated_at: st.chat.updated_at }; d.chats.push(c); }
+        c.topic = base;
+      }
+      var needPublish = false;
+      if ((st.chat.updated_at || "") > (c.updated_at || c.created_at || "")) {
+        c.name = st.chat.name; c.emoji = st.chat.emoji; c.pass_hash = st.chat.pass_hash; c.updated_at = st.chat.updated_at;
+      } else if ((c.updated_at || "") > (st.chat.updated_at || "")) needPublish = true;
+      c.dead = c.dead || { m: {}, s: {} };
+      (st.dead && st.dead.m || []).forEach(function (id) { c.dead.m[id] = 1; });
+      (st.dead && st.dead.s || []).forEach(function (id) { c.dead.s[id] = 1; });
+      var remoteDeadM = {}, remoteDeadS = {};
+      (st.dead && st.dead.m || []).forEach(function (id) { remoteDeadM[id] = 1; });
+      (st.dead && st.dead.s || []).forEach(function (id) { remoteDeadS[id] = 1; });
+      if (Object.keys(c.dead.m).some(function (id) { return !remoteDeadM[id]; }) || Object.keys(c.dead.s).some(function (id) { return !remoteDeadS[id]; })) needPublish = true;
+      if ((st.clearedAt || 0) > (c.clearedAt || 0)) c.clearedAt = st.clearedAt;
+      else if ((c.clearedAt || 0) > (st.clearedAt || 0)) needPublish = true;
+
+      // Personas y miembros
+      var memberSet = {};
+      d.chat_members.forEach(function (m) { if (m.chat_id === c.id) memberSet[m.user_id] = 1; });
+      (st.members || []).forEach(function (p) {
+        var lp = d.profiles.filter(function (x) { return x.id === p.id; })[0];
+        if (lp) { lp.name = p.name; lp.color = p.color; if (p.photo) lp.photo = p.photo; else delete lp.photo; }
+        else d.profiles.push({ id: p.id, name: p.name, color: p.color, photo: p.photo || undefined });
+        if (!memberSet[p.id]) { memberSet[p.id] = 1; d.chat_members.push({ chat_id: c.id, user_id: p.id, joined_at: new Date().toISOString() }); }
+      });
+      var remoteMembers = {}; (st.members || []).forEach(function (p) { remoteMembers[p.id] = 1; });
+      if (Object.keys(memberSet).some(function (id) { return !remoteMembers[id]; })) needPublish = true;
+
+      // Mensajes
+      var have = {}, newFromOthers = 0, lastName = "";
+      d.messages.forEach(function (m) { if (m.chat_id === c.id) have[String(m.id)] = m; });
+      var remoteIds = {};
+      (st.messages || []).forEach(function (rm) {
+        var id = String(rm.id); remoteIds[id] = 1;
+        if (c.dead.m[id]) return;
+        if (have[id]) { have[id].name = rm.name; have[id].color = rm.color; return; }
+        var row = {}; for (var k in rm) if (k !== "media") row[k] = rm[k];
+        row.chat_id = c.id;
+        if (rm.media) {
+          row.pending = rm.media;
+          var pm = pendingMedia[base + "/" + id];
+          if (pm) {
+            delete pendingMedia[base + "/" + id];
+            fillMedia(row, rm.media, pm).then(function () { if (booted && currentChat === c.id) renderAllMessages(); });
+          }
+        }
+        d.messages.push(row); have[id] = row;
+        var mine = identityFor(c.id);
+        if (!mine || rm.user_id !== mine.id) { newFromOthers++; lastName = rm.name; }
+      });
+      d.messages = d.messages.filter(function (m) { return m.chat_id !== c.id || !c.dead.m[String(m.id)]; });
+      var localWindow = d.messages.filter(function (m) { return m.chat_id === c.id; }).slice(-MAX_MSGS);
+      if (localWindow.some(function (m) { return !remoteIds[String(m.id)]; })) needPublish = true;
+      d.messages.sort(function (a, b) { return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0; });
+
+      // Dibujos
+      var haveS = {}; d.strokes.forEach(function (s) { if (s.chat_id === c.id) haveS[s.id] = 1; });
+      var remoteS = {};
+      (st.strokes || []).forEach(function (s) {
+        remoteS[s.id] = 1;
+        if (!haveS[s.id] && !c.dead.s[s.id]) { var copy = JSON.parse(JSON.stringify(s)); copy.chat_id = c.id; d.strokes.push(copy); haveS[s.id] = 1; }
+      });
+      d.strokes = d.strokes.filter(function (s) { return s.chat_id !== c.id || (!c.dead.s[s.id] && (s.t || 0) >= (c.clearedAt || 0)); });
+      if (d.strokes.filter(function (s) { return s.chat_id === c.id; }).slice(-MAX_STROKES).some(function (s) { return !remoteS[s.id]; })) needPublish = true;
+
+      saveDB(d);
+      if (needPublish) changed(c.id);
+      if (!booted || !identityFor(c.id)) return;
+      if (currentChat === c.id) {
+        renderAllMessages(); reloadStrokes(); redrawAll();
+        $("groupNameLabel").textContent = chatTitle();
+        if (activeTab() === "chatTab") markSeen();
+      } else renderChatsHome();
+      if (newFromOthers) {
+        if (currentChat && currentChat !== c.id) toast("💬 " + lastName + " en " + c.name);
+        flagTab("chatTab");
+      }
+    }
+
+    // ---- stories: cada uno aporta las suyas; se juntan en cada chat ----
+    function publishStories(base) {
+      if (!client) return;
+      var d = getDB(), cache = storyCache[base] || { stories: [], dead: [] }, mineIds = myIds();
+      var dead = {}; (cache.dead || []).concat(Object.keys(d.deadStories || {})).forEach(function (id) { dead[id] = 1; });
+      var byId = {};
+      (cache.stories || []).concat(liveStories(d).filter(function (s) { return mineIds[s.user_id]; })).forEach(function (s) { if (!dead[s.id]) byId[s.id] = s; });
+      var limit = Date.now() - STORY_HOURS * 3600 * 1000;
+      var list = Object.keys(byId).map(function (k) { return byId[k]; }).filter(function (s) { return new Date(s.created_at).getTime() > limit; });
+      var obj = { stories: list, dead: Object.keys(dead).slice(-300) };
+      storyCache[base] = obj;
+      client.publish(base + "/stories", JSON.stringify(obj), { qos: 1, retain: true });
+    }
+    function pushStories() {
+      myBases().forEach(function (b) {
+        if (storyCache[b]) publishStories(b);
+        else setTimeout(function () { publishStories(b); }, 3000);   // primero que lleguen las de los demás
+      });
+    }
+    function applyStories(base, obj) {
+      storyCache[base] = obj;
+      var d = getDB(), have = {}, changedAny = false, newFromOthers = "";
+      d.deadStories = d.deadStories || {};
+      (obj.dead || []).forEach(function (id) { d.deadStories[id] = 1; });
+      d.stories = d.stories.filter(function (s) { if (d.deadStories[s.id]) { changedAny = true; return false; } return true; });
+      d.stories.forEach(function (s) { have[s.id] = 1; });
+      var limit = Date.now() - STORY_HOURS * 3600 * 1000, mineIds = myIds();
+      (obj.stories || []).forEach(function (s) {
+        if (have[s.id] || d.deadStories[s.id] || new Date(s.created_at).getTime() <= limit) return;
+        d.stories.push(s); have[s.id] = 1; changedAny = true;
+        if (!mineIds[s.user_id]) newFromOthers = s.name;
+      });
+      if (changedAny) saveDB(d);
+      var remote = {}; (obj.stories || []).forEach(function (s) { remote[s.id] = 1; });
+      if (liveStories(d).some(function (s) { return mineIds[s.user_id] && !remote[s.id] && !d.deadStories[s.id]; })) publishStories(base);
+      if (changedAny && booted) { renderStories(); if (newFromOthers) flagTab("storyTab"); }
+    }
+
+    return {
+      connect: connect, sync: sync, find: find, topicFor: topicFor, live: live,
+      changed: changed, publishAll: publishAll, sendMedia: sendMedia, dropMedia: dropMedia,
+      pushStories: pushStories, publishStories: publishStories,
+      isOnline: function () { return !!(client && connected); },
+      deleteRemote: function (base, moved) { if (client && base) client.publish(base + "/state", JSON.stringify(moved ? { moved: true } : { deleted: true }), { qos: 1, retain: true }); },
+      maxMedia: MAX_MEDIA, status: status
     };
   })();
 
@@ -749,6 +1091,7 @@
 
   function start() {
     initChatModal(); initSettings(); initStories();
+    cloud.connect(); cloud.sync();
     $("welcomeCreateBtn").onclick = function () { openChatModal("create"); };
     $("welcomeJoinBtn").onclick = function () { openChatModal("join"); };
     $("welcomeImportBtn").onclick = function () { $("importFile").click(); };
@@ -831,7 +1174,7 @@
       var c = r.c, last = r.last, mine = r.me, row = document.createElement("div");
       row.className = "chat-row"; row.setAttribute("role", "button"); row.tabIndex = 0;
       var fromMe = last && mine && last.user_id === mine.id;
-      var preview = last ? ((fromMe ? "Tú" : last.name) + ": " + (last.sticker || last.text || (last.audio ? "🎤 Audio" : last.image ? "📷 Foto" : last.video ? "🎬 Vídeo" : last.stickerImg ? "🎨 Sticker" : last.gif ? "🎞️ GIF" : ""))) : "Chat nuevo, ¡escribe algo!";
+      var preview = last ? ((fromMe ? "Tú" : last.name) + ": " + (last.sticker || last.text || (last.audio || last.pending === "audio" ? "🎤 Audio" : last.image || last.pending === "image" ? "📷 Foto" : last.video || last.vlocal || last.pending === "video" ? "🎬 Vídeo" : last.stickerImg ? "🎨 Sticker" : last.gif || last.pending === "gif" ? "🎞️ GIF" : ""))) : "Chat nuevo, ¡escribe algo!";
       var unread = last && !fromMe && (!seen[c.id] || new Date(seen[c.id]) < new Date(last.created_at));
       row.innerHTML = '<div class="chat-icon"></div><div class="chat-info"><div class="cname"></div><div class="last"></div></div>' +
         (unread ? '<span class="unread-dot"></span>' : "") + '<span class="chat-when">' + (last ? fmtWhen(last.created_at) : "") + "</span>" +
@@ -889,6 +1232,7 @@
       : "¿Salir del chat «" + c.name + "»? Podrás volver a entrar con su nombre y contraseña.";
     askConfirm(question, owner ? "Borrar chat" : "Salir", function () {
       var d = getDB();
+      if (owner && c.topic) cloud.deleteRemote(c.topic, false);
       if (owner) {
         d.chats = d.chats.filter(function (x) { return x.id !== c.id; });
         d.messages.forEach(function (m) { if (m.chat_id === c.id && m.video) mediaDel(m.video); });
@@ -898,6 +1242,7 @@
       }
       saveDB(d);
       forgetChat(c.id);
+      cloud.sync();
       closeChatModal();
       afterMineChanged();
       toast(owner ? "Chat borrado" : "Has salido del chat");
@@ -958,6 +1303,8 @@
     if ($("mainApp").style.display === "none") boot();
     openChat(chatId);
     bus.send({ type: "chats" });
+    cloud.sync();
+    cloud.changed(chatId);
   }
 
   function saveChatModal() {
@@ -965,55 +1312,87 @@
     var name = $("chatNameInput").value.trim(), pass = $("chatPassInput").value;
     var userName = last ? last.name : $("userNameInput").value.trim();
     if (last) pickedColor = last.color;
-    var err = $("chatError"); err.textContent = "";
+    var err = $("chatError"), btn = $("chatSaveBtn"); err.textContent = "";
     if (!name) { err.textContent = "Escribe el nombre del chat."; $("chatNameInput").focus(); return; }
     if (chatMode !== "edit" && !userName) { err.textContent = "Escribe tu nombre."; $("userNameInput").focus(); return; }
     if ((chatMode !== "edit" || pass) && pass.length < 3) { err.textContent = "La contraseña tiene que tener al menos 3 letras o números."; $("chatPassInput").focus(); return; }
-    var sameName = getDB().chats.filter(function (c) { return c.name.toLowerCase() === name.toLowerCase() && (!editingChat || c.id !== editingChat.id); });
+    var btnText = btn.textContent;
+    function busy(on, text) { btn.disabled = on; btn.textContent = on ? (text || "Un momento…") : btnText; }
 
-    function createNow() {
-      hashPass(pass).then(function (h) {
-        var d = getDB(), now = new Date().toISOString(), id = rid() + rid();
-        var user = findOrCreateProfile(d, userName, pickedColor);
-        d.chats.push({ id: id, name: name, emoji: pickedEmoji, pass_hash: h, created_by: user.id, created_at: now });
-        d.chat_members.push({ chat_id: id, user_id: user.id, joined_at: now });
-        if (!saveDB(d)) { err.textContent = "Este navegador no deja guardar datos en esta página. Revisa que no estés en modo privado y que no tengas bloqueados los datos de los sitios."; return; }
-        enterChat(id, user);
-      });
+    // Entra en un chat que ya existe (aquí o recién traído del servidor)
+    function joinLocal(c, topic) {
+      var d = getDB(), cc = chatById(c.id, d), user = findOrCreateProfile(d, userName, pickedColor);
+      if (topic && !cc.topic) cc.topic = topic;
+      if (!d.chat_members.some(function (m) { return m.chat_id === cc.id && m.user_id === user.id; })) d.chat_members.push({ chat_id: cc.id, user_id: user.id, joined_at: new Date().toISOString() });
+      if (!saveDB(d)) return;
+      busy(false);
+      enterChat(cc.id, user);
+      toast("Has entrado en " + cc.name);
+    }
+    function createNow(h, topic) {
+      var d = getDB(), now = new Date().toISOString(), id = "c" + Date.now().toString(36) + rid();
+      var user = findOrCreateProfile(d, userName, pickedColor);
+      d.chats.push({ id: id, name: name, emoji: pickedEmoji, pass_hash: h, created_by: user.id, created_at: now, updated_at: now, topic: topic });
+      d.chat_members.push({ chat_id: id, user_id: user.id, joined_at: now });
+      busy(false);
+      if (!saveDB(d)) { err.textContent = "Este navegador no deja guardar datos en esta página. Revisa que no estés en modo privado y que no tengas bloqueados los datos de los sitios."; return; }
+      enterChat(id, user);
+      if (!cloud.isOnline()) toast("Sin conexión al servidor: el chat se compartirá cuando vuelva la conexión");
     }
 
-    var mode = chatMode;
-    if (mode === "create") {
-      if (!sameName.length) { createNow(); return; }
-      // Ese chat ya existe: si la contraseña es la suya, se entra directamente
-      mode = "join";
-    } else if (mode === "join" && !sameName.length) {
-      // Los chats se guardan en cada aparato: si aquí no existe, se ofrece crearlo
-      askConfirm("En este aparato todavía no hay ningún chat llamado «" + name + "». ¿Quieres crearlo ahora con esa contraseña?", "Crear chat", createNow, null, true);
-      return;
-    }
-    if (mode === "join") {
-      hashPass(pass).then(function (h) {
-        var c = sameName[0];
-        if (c.pass_hash !== h) {
-          err.textContent = chatMode === "create" ? "Ya hay un chat con ese nombre y la contraseña no coincide. Pon su contraseña para entrar, o elige otro nombre." : "La contraseña no es correcta.";
-          $("chatPassInput").select(); return;
+    if (chatMode === "edit") { saveEdit(); return; }
+
+    busy(true, "Buscando el chat…");
+    Promise.all([hashPass(pass), cloud.topicFor(name, pass)]).then(function (r) {
+      var h = r[0], topic = r[1];
+      // 1) ¿Ya está en este aparato con esa contraseña?
+      var local = getDB().chats.filter(function (c) { return c.name.toLowerCase() === name.toLowerCase() && c.pass_hash === h; })[0];
+      if (local) { joinLocal(local, topic); return; }
+      // 2) ¿Está en el servidor? (lo creó otra persona en otro aparato)
+      cloud.find(topic).then(function (st) {
+        if (st && st.chat && !st.deleted && !st.moved) {
+          if (st.chat.pass_hash !== h) { busy(false); err.textContent = "La contraseña no es correcta."; return; }
+          // applyState ya lo ha guardado en este aparato al llegar
+          var c = chatById(st.chat.id);
+          if (!c) { busy(false); err.textContent = "No se pudo traer el chat. Inténtalo otra vez."; return; }
+          joinLocal(c, topic);
+          return;
         }
-        var d = getDB(), user = findOrCreateProfile(d, userName, pickedColor);
-        if (!d.chat_members.some(function (m) { return m.chat_id === c.id && m.user_id === user.id; })) d.chat_members.push({ chat_id: c.id, user_id: user.id, joined_at: new Date().toISOString() });
-        if (!saveDB(d)) return;
-        enterChat(c.id, user);
-        toast("Has entrado en " + c.name);
+        if (st === undefined && chatMode === "join") {
+          busy(false);
+          err.textContent = "No hay conexión con el servidor. Revisa tu internet e inténtalo otra vez.";
+          return;
+        }
+        // 3) No existe en ningún sitio
+        if (chatMode === "create") { createNow(h, topic); return; }
+        busy(false);
+        askConfirm("No hay ningún chat llamado «" + name + "» con esa contraseña. ¿Quieres crearlo ahora?", "Crear chat", function () { createNow(h, topic); }, null, true);
       });
-    } else {
-      if (sameName.length) { err.textContent = "Ya hay otro chat con ese nombre."; return; }
-      (pass ? hashPass(pass) : Promise.resolve(null)).then(function (h) {
-        var d = getDB(), id = editingChat.id;
-        d.chats.forEach(function (c) { if (c.id === id) { c.name = name; c.emoji = pickedEmoji; if (h) c.pass_hash = h; } });
-        if (!saveDB(d)) return;
+    });
+
+    function saveEdit() {
+      var c = editingChat, renamed = name !== c.name;
+      if (renamed && c.topic && !pass) {
+        err.textContent = "Para cambiar el nombre, escribe también la contraseña del chat (puede ser la misma de siempre).";
+        $("chatPassInput").focus(); return;
+      }
+      busy(true);
+      (pass ? Promise.all([hashPass(pass), cloud.topicFor(name, pass)]) : Promise.resolve([null, null])).then(function (r) {
+        var h = r[0], topic = r[1], d = getDB(), cc = chatById(c.id, d);
+        if (!cc) { busy(false); return; }
+        var oldTopic = cc.topic;
+        cc.name = name; cc.emoji = pickedEmoji; cc.updated_at = new Date().toISOString();
+        if (h) cc.pass_hash = h;
+        if (topic) cc.topic = topic;
+        if (!saveDB(d)) { busy(false); return; }
+        // Nombre + contraseña marcan la "dirección" del chat: si cambian, el chat se muda
+        if (oldTopic && topic && oldTopic !== topic) cloud.deleteRemote(oldTopic, true);
+        cloud.sync(); cloud.changed(c.id);
+        busy(false);
         closeChatModal();
         $("groupNameLabel").textContent = chatTitle();
-        if (h) toast("Contraseña cambiada");
+        if (oldTopic && topic && oldTopic !== topic) toast("Guardado. Avisa a los demás del nuevo nombre o contraseña para que vuelvan a entrar.");
+        else if (h) toast("Contraseña cambiada");
         bus.send({ type: "chats" });
       });
     }
@@ -1064,7 +1443,14 @@
       } else {
         bubble.className = "bubble";
         var senderEl = !isMe ? '<div class="sender" style="color:' + escapeHtml(row.color || "#999") + '">' + escapeHtml(row.name) + "</div>" : "";
-        if (row.image) {
+        if (row.pending && !row.image && !row.audio && !row.gif && !row.video) {
+          var what = { image: "📷 Recibiendo foto…", audio: "🎤 Recibiendo audio…", gif: "🎞️ Recibiendo GIF…", video: "🎬 Recibiendo vídeo…" }[row.pending] || "⏳ Recibiendo…";
+          bubble.innerHTML = senderEl + '<div class="text"></div><div class="time">' + fmtTime(row.created_at) + "</div>";
+          bubble.querySelector(".text").textContent = what;
+        } else if (row.vlocal && !row.video) {
+          bubble.innerHTML = senderEl + '<div class="text"></div><div class="time">' + fmtTime(row.created_at) + "</div>";
+          bubble.querySelector(".text").textContent = "🎬 Vídeo (era muy grande: solo se ve en el aparato de quien lo mandó)";
+        } else if (row.image) {
           bubble.className = "bubble photo-bubble";
           bubble.innerHTML = senderEl + '<img class="msg-img" alt="Foto"><div class="time">' + fmtTime(row.created_at) + "</div>";
           var pic = bubble.querySelector(".msg-img");
@@ -1111,7 +1497,8 @@
   function addMessage(fields) {
     if (!currentChat || !me) return;
     var d = getDB();
-    var row = { id: ++d.seq, chat_id: currentChat, user_id: me.id, name: me.name, color: me.color, created_at: new Date().toISOString() };
+    // Identificador único entre todos los aparatos
+    var row = { id: "m" + Date.now().toString(36) + rid(), chat_id: currentChat, user_id: me.id, name: me.name, color: me.color, created_at: new Date().toISOString() };
     for (var k in fields) row[k] = fields[k];
     d.messages.push(row);
     var inChat = d.messages.filter(function (m) { return m.chat_id === currentChat; });
@@ -1119,16 +1506,26 @@
     if (!saveDB(d)) return;
     renderAllMessages();
     bus.send({ type: "msg", chatId: currentChat, name: me.name });
+    cloud.sendMedia(currentChat, row);
+    cloud.changed(currentChat);
+  }
+
+  // Borra un mensaje aquí y lo apunta como borrado para que desaparezca en todos los aparatos
+  function killMessage(chatId, id) {
+    var d = getDB(), c = chatById(chatId, d);
+    var row = d.messages.filter(function (m) { return m.id === id; })[0];
+    if (row && row.video) mediaDel(row.video);
+    d.messages = d.messages.filter(function (m) { return m.id !== id; });
+    if (c) { c.dead = c.dead || { m: {}, s: {} }; c.dead.m[String(id)] = 1; }
+    saveDB(d);
+    renderAllMessages();
+    bus.send({ type: "msgdel", chatId: chatId });
+    cloud.dropMedia(chatId, id);
+    cloud.changed(chatId);
   }
 
   function deleteMessage(id) {
-    askConfirm("¿Borrar este mensaje? Se borra para todos.", "Borrar", function () {
-      var d = getDB();
-      d.messages = d.messages.filter(function (m) { return m.id !== id; });
-      saveDB(d);
-      renderAllMessages();
-      bus.send({ type: "msgdel", chatId: currentChat });
-    });
+    askConfirm("¿Borrar este mensaje? Se borra para todos.", "Borrar", function () { killMessage(currentChat, id); });
   }
 
   // ===== VÍDEOS: van en IndexedDB, que tiene mucho más sitio que localStorage =====
@@ -1165,7 +1562,10 @@
     if (f.size > 80 * 1024 * 1024) { toast("Ese vídeo es demasiado grande (máximo 80 MB)"); return; }
     var id = "v" + rid() + rid();
     toast("Enviando vídeo…");
-    mediaPut(id, f).then(function () { addMessage({ video: id, vtype: f.type || "video/mp4" }); },
+    // Los vídeos grandes no caben en el servidor de prueba: se quedan solo en este aparato
+    var c = chatById(currentChat), tooBig = !!(c && c.topic) && f.size > cloud.maxMedia * 0.7;
+    if (tooBig) toast("El vídeo es grande para el servidor de prueba: solo se verá en este aparato");
+    mediaPut(id, f).then(function () { addMessage(tooBig ? { video: id, vtype: f.type || "video/mp4", vlocal: true } : { video: id, vtype: f.type || "video/mp4" }); },
       function () { toast("No se pudo guardar el vídeo: no queda espacio en este aparato"); });
   }
 
@@ -1696,9 +2096,7 @@
       var id = openImg.id, video = openImg.video;
       askConfirm(video ? "¿Borrar este vídeo? Se borra para todos." : "¿Borrar esta foto? Se borra para todos.", "Borrar", function () {
         closeImage();
-        if (video) mediaDel(video);
-        var d = getDB(); d.messages = d.messages.filter(function (m) { return m.id !== id; }); saveDB(d);
-        renderAllMessages(); bus.send({ type: "msgdel", chatId: currentChat });
+        killMessage(currentChat, id);
       });
     };
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && openImg) closeImage(); });
@@ -1806,7 +2204,7 @@
       e.preventDefault();
       try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
       var p = pos(e);
-      curStroke = { id: rid() + rid(), chat_id: currentChat, a: me.id, c: currentColor, s: eraser ? currentSize * 2.5 : currentSize, e: eraser ? 1 : 0, pts: [p] };
+      curStroke = { id: rid() + rid(), t: Date.now(), chat_id: currentChat, a: me.id, c: currentColor, s: eraser ? currentSize * 2.5 : currentSize, e: eraser ? 1 : 0, pts: [p] };
       drawSeg(curStroke, p, p);
       sendDraw({ type: "stroke-start", st: JSON.parse(JSON.stringify(curStroke)) });
     });
@@ -1818,16 +2216,27 @@
       if (Math.abs(p[0] - last[0]) * W() < 1.5 && Math.abs(p[1] - last[1]) * H() < 1.5) return;
       curStroke.pts.push(p);
       drawSeg(curStroke, last, p);
-      sendDraw({ type: "stroke-pt", id: curStroke.id, p: p });
+      // Los puntos se mandan en tandas para no saturar el servidor
+      ptBuffer.push(p);
+      if (!ptTimer) ptTimer = setTimeout(flushPts, 160);
     });
+    var ptBuffer = [], ptTimer = null;
+    function flushPts() {
+      ptTimer = null;
+      if (!ptBuffer.length || !curStroke) { ptBuffer = []; return; }
+      sendDraw({ type: "stroke-pts", id: curStroke.id, pts: ptBuffer });
+      ptBuffer = [];
+    }
     function endStroke() {
       if (!curStroke) return;
+      clearTimeout(ptTimer); flushPts();
       var st = curStroke; curStroke = null;
       var d = getDB(); d.strokes.push(st);
       var inChat = d.strokes.filter(function (s) { return s.chat_id === st.chat_id; });
       if (inChat.length > 1500) { var drop = inChat[0].id; d.strokes = d.strokes.filter(function (s) { return s.id !== drop; }); }
       saveDB(d); reloadStrokes();
       sendDraw({ type: "stroke-end", id: st.id });
+      cloud.changed(st.chat_id);
     }
     canvas.addEventListener("pointerup", endStroke);
     canvas.addEventListener("pointercancel", endStroke);
@@ -1838,20 +2247,24 @@
       reloadStrokes();
       for (var i = strokes.length - 1; i >= 0; i--) {
         if (me && strokes[i].a === me.id) {
-          var id = strokes[i].id, d = getDB();
+          var id = strokes[i].id, d = getDB(), c = chatById(currentChat, d);
           d.strokes = d.strokes.filter(function (s) { return s.id !== id; });
+          if (c) { c.dead = c.dead || { m: {}, s: {} }; c.dead.s[id] = 1; }
           saveDB(d); reloadStrokes(); redrawAll();
-          sendDraw({ type: "stroke-undo" }); return;
+          sendDraw({ type: "stroke-undo" });
+          cloud.changed(currentChat); return;
         }
       }
       toast("No tienes trazos que deshacer");
     };
     $("clearBtn").onclick = function () {
       askConfirm("¿Borrar todo el dibujo del fondo? Se borra para todos.", "Borrar", function () {
-        var d = getDB(), id = currentChat;
+        var d = getDB(), id = currentChat, c = chatById(id, d);
         d.strokes = d.strokes.filter(function (s) { return s.chat_id !== id; });
+        if (c) c.clearedAt = Date.now();
         saveDB(d); reloadStrokes(); redrawAll();
         sendDraw({ type: "stroke-clear" });
+        cloud.changed(id);
       });
     };
   }
@@ -1864,8 +2277,15 @@
     } else if (m.type === "stroke-pt") {
       var st = remoteStrokes[m.id]; if (!st) return;
       var last = st.pts[st.pts.length - 1]; st.pts.push(m.p); drawSeg(st, last, m.p); showRemoteDrawing(m.name);
+    } else if (m.type === "stroke-pts") {
+      var sp = remoteStrokes[m.id]; if (!sp || !m.pts) return;
+      m.pts.forEach(function (p) { var lp = sp.pts[sp.pts.length - 1]; sp.pts.push(p); drawSeg(sp, lp, p); });
+      showRemoteDrawing(m.name);
     } else if (m.type === "stroke-end") {
-      delete remoteStrokes[m.id]; reloadStrokes();
+      // Si viene de otro aparato, se queda dibujado hasta que llegue guardado en el chat
+      var done = remoteStrokes[m.id]; delete remoteStrokes[m.id];
+      reloadStrokes();
+      if (done && !strokes.some(function (s) { return s.id === done.id; })) strokes.push(done);
     } else {
       if (m.type === "stroke-clear") remoteStrokes = {};
       reloadStrokes(); redrawAll();
@@ -2167,6 +2587,7 @@
     closeStoryModal();
     renderStories();
     toast("Story publicada");
+    cloud.pushStories();
     bus.send({ type: "stories", name: user.name });
   }
 
@@ -2294,7 +2715,9 @@
       clearTimeout(viewer.timer);
       askConfirm("¿Borrar esta story?", "Borrar", function () {
         if (!viewer) return;
-        var d = getDB(); d.stories = d.stories.filter(function (x) { return x.id !== s.id; }); saveDB(d);
+        var d = getDB(); d.stories = d.stories.filter(function (x) { return x.id !== s.id; });
+        d.deadStories = d.deadStories || {}; d.deadStories[s.id] = 1;
+        saveDB(d); cloud.pushStories();
         bus.send({ type: "stories" });
         toast("Story borrada");
         var g = viewer.groups[viewer.gi]; g.items.splice(viewer.si, 1);
@@ -2481,7 +2904,8 @@
   }
 
   function setupPc(c) {
-    var pc = new RTCPeerConnection({ iceServers: [] });
+    // Servidores STUN públicos: ayudan a que dos aparatos en redes distintas se encuentren
+    var pc = new RTCPeerConnection({ iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] });
     pc.onicecandidate = function (e) { if (e.candidate) bus.send({ type: "ice", to: c.peer, callId: c.id, cand: e.candidate.toJSON() }); };
     pc.ontrack = function (e) {
       var rv = $("remoteVideo");
@@ -2658,7 +3082,7 @@
         renderStories();
         if (m.name) flagTab("storyTab");
         break;
-      case "stroke-start": case "stroke-pt": case "stroke-end": case "stroke-undo": case "stroke-clear":
+      case "stroke-start": case "stroke-pt": case "stroke-pts": case "stroke-end": case "stroke-undo": case "stroke-clear":
         onDrawMessage(m); break;
       default: if (booted) onCallMessage(m);
     }
@@ -2687,6 +3111,7 @@
     if (!saveDB(d)) return;
     renderProfile(); refreshAvatars();
     toast(photo ? "Foto de perfil cambiada" : "Foto quitada");
+    cloud.publishAll();
     bus.send({ type: "profile" });
   }
 
@@ -2710,6 +3135,7 @@
     if (me && me.id === who.id) me.name = name;
     renderProfile(); refreshAvatars(); renderChatsHome(); announce();
     toast("Ahora te llamas " + name);
+    cloud.publishAll();
     bus.send({ type: "profile" });
   }
 
