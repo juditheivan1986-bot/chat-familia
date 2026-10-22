@@ -1,0 +1,3278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chat Familiar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Pacifico&family=Lobster&family=Caveat:wght@600&family=Bebas+Neue&family=Playfair+Display:wght@600&family=Permanent+Marker&family=Dancing+Script:wght@600&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root { --font-display:'Fredoka',system-ui,sans-serif; --font-body:'Inter',system-ui,sans-serif; --shadow:0 8px 24px rgba(30,20,15,0.08); --safe-top:env(safe-area-inset-top,0px); --safe-bottom:env(safe-area-inset-bottom,0px); }
+  :root[data-theme="amanecer"] { --bg:#FFF6EF; --surface:#FFFFFF; --surface-2:#FFEFE1; --accent:#F08A5D; --accent-ink:#FFFFFF; --text:#402A22; --text-soft:#8A6F62; --border:#F3DFCF; }
+  :root[data-theme="menta"]    { --bg:#F1FBF6; --surface:#FFFFFF; --surface-2:#E1F5EC; --accent:#3FA796; --accent-ink:#FFFFFF; --text:#1F3A34; --text-soft:#5F8378; --border:#D6EFE4; }
+  :root[data-theme="cielo"]    { --bg:#F0F7FF; --surface:#FFFFFF; --surface-2:#E2EFFF; --accent:#4F86C6; --accent-ink:#FFFFFF; --text:#1E2A3A; --text-soft:#62789A; --border:#D6E7FA; }
+  :root[data-theme="lavanda"]  { --bg:#F8F3FF; --surface:#FFFFFF; --surface-2:#EDE1FB; --accent:#8E6BC7; --accent-ink:#FFFFFF; --text:#2E2440; --text-soft:#7C6D97; --border:#E6D9F7; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; margin:0; background:var(--bg); color:var(--text); font-family:var(--font-body); -webkit-tap-highlight-color:transparent; }
+  body { padding-top:var(--safe-top); overflow:hidden; }
+  #app { height:100vh; height:100dvh; display:flex; flex-direction:column; }
+  button { font-family:var(--font-body); cursor:pointer; border:none; background:none; color:inherit; }
+  input { font-family:var(--font-body); }
+
+  .banner { background:var(--surface-2); color:var(--text-soft); font-size:12px; text-align:center; padding:6px 10px; flex-shrink:0; }
+
+  .setup-wrap { flex:1; overflow-y:auto; display:flex; justify-content:center; padding:32px 18px 40px; }
+  .setup-card { max-width:440px; width:100%; background:var(--surface); border-radius:24px; padding:28px 24px; box-shadow:var(--shadow); border:1px solid var(--border); align-self:flex-start; }
+  .setup-card h1 { font-family:var(--font-display); font-size:24px; margin:6px 0 4px; font-weight:600; }
+  .setup-card p.lead { color:var(--text-soft); margin:0 0 22px; line-height:1.5; font-size:14.5px; }
+  .field { margin-bottom:16px; }
+  .field label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text-soft); }
+  .field input { width:100%; padding:12px 14px; border-radius:12px; border:1.5px solid var(--border); background:var(--bg); font-size:15px; color:var(--text); }
+  .field input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  .swatch-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:4px; }
+  .swatch { width:34px; height:34px; border-radius:50%; border:3px solid transparent; cursor:pointer; }
+  .swatch.selected { border-color:var(--text); }
+  .btn-primary { width:100%; padding:14px; border-radius:14px; background:var(--accent); color:var(--accent-ink); font-weight:600; font-size:15px; margin-top:6px; font-family:var(--font-display); }
+  .btn-primary.secondary { background:var(--surface-2); color:var(--text); }
+  .error-msg { color:#C0392B; font-size:13px; margin-top:10px; min-height:16px; }
+
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:var(--surface); border-bottom:1px solid var(--border); flex-shrink:0; }
+  .topbar h2 { font-family:var(--font-display); font-size:19px; margin:0; font-weight:600; }
+  .topbar .me-chip { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-soft); font-weight:600; }
+  #meLabel { display:flex; align-items:center; gap:6px; }
+  .topbar-left { display:flex; align-items:center; gap:6px; min-width:0; }
+  .topbar-left h2 { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .back-btn { font-size:22px; font-weight:600; margin-left:-6px; }
+
+  .chats-home { flex:1; overflow-y:auto; padding:10px 12px 90px; }
+  #chatsList { max-width:640px; margin:0 auto; }
+  .chat-row { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:12px 14px; margin-bottom:8px; }
+  .chat-row:active { background:var(--surface-2); }
+  .chat-icon { width:48px; height:48px; border-radius:50%; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
+  .chat-info { flex:1; min-width:0; }
+  .chat-info .cname { font-weight:600; font-size:15px; font-family:var(--font-display); }
+  .chat-info .last { color:var(--text-soft); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  .chat-when { font-size:11.5px; color:var(--text-soft); align-self:flex-start; margin-top:4px; }
+  .unread-dot { width:10px; height:10px; border-radius:50%; background:var(--accent); flex-shrink:0; }
+  .home-actions { position:absolute; left:12px; right:12px; bottom:14px; display:flex; gap:10px; justify-content:center; z-index:3; }
+  .home-btn { flex:1; max-width:250px; padding:14px 10px; border-radius:16px; background:var(--accent); color:var(--accent-ink); font-family:var(--font-display); font-weight:600; font-size:15px; box-shadow:0 8px 24px rgba(0,0,0,.12); }
+  .home-btn.secondary { background:var(--surface); color:var(--text); border:1.5px solid var(--border); }
+  .chat-row { cursor:pointer; }
+  .row-del { width:36px; height:36px; border-radius:10px; font-size:16px; flex-shrink:0; opacity:.55; }
+  .row-del:hover { opacity:1; background:var(--surface-2); }
+  .modal-lead { color:var(--text-soft); font-size:13.5px; line-height:1.5; margin:-8px 0 16px; }
+  .emoji-pick { width:42px; height:42px; border-radius:12px; background:var(--surface-2); font-size:22px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:2.5px solid transparent; }
+  .emoji-pick.selected { border-color:var(--accent); }
+  .icon-btn { font-size:20px; padding:6px; border-radius:10px; line-height:1; }
+  .icon-btn:active { background:var(--surface-2); }
+
+  .tab-content { flex:1; overflow:hidden; display:none; flex-direction:column; position:relative; }
+  .tab-content.active { display:flex; }
+
+  /* ---- chat + fondo dibujable ---- */
+  .chat-stage { flex:1; position:relative; overflow:hidden; background:var(--bg); }
+  #bgCanvas { position:absolute; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; }
+  .chat-stage.drawing #bgCanvas { pointer-events:auto; touch-action:none; cursor:crosshair; }
+  #chatList { position:absolute; inset:0; z-index:1; overflow-y:auto; padding:14px 12px; display:flex; flex-direction:column; gap:8px; transition:opacity .2s; }
+  .chat-stage.drawing #chatList { pointer-events:none; opacity:.3; }
+  .draw-hint { position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:2; background:var(--accent); color:var(--accent-ink); font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:20px; display:none; white-space:nowrap; box-shadow:var(--shadow); }
+  .chat-stage.drawing .draw-hint { display:block; }
+  .remote-drawing { position:absolute; bottom:10px; left:12px; z-index:2; background:var(--surface); border:1px solid var(--border); color:var(--text-soft); font-size:12.5px; font-weight:600; padding:5px 11px; border-radius:20px; box-shadow:var(--shadow); display:none; }
+  .remote-drawing.show { display:block; }
+
+  .bubble-row { display:flex; gap:8px; align-items:flex-end; max-width:84%; }
+  .bubble-row.me { align-self:flex-end; flex-direction:row-reverse; }
+  .avatar-dot { width:26px; height:26px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; }
+  .bubble { background:var(--surface); border-radius:16px; padding:9px 13px; box-shadow:var(--shadow); font-size:14.5px; line-height:1.4; word-wrap:break-word; }
+  .bubble-row.me .bubble { background:var(--accent); color:var(--accent-ink); }
+  .bubble .sender { font-size:11.5px; font-weight:700; margin-bottom:2px; opacity:0.75; }
+  .bubble .time { font-size:10px; opacity:0.55; margin-top:3px; text-align:right; }
+  .sticker-bubble { font-size:52px; line-height:1; background:none; box-shadow:none; padding:0; }
+  .empty-state { margin:auto; text-align:center; color:var(--text-soft); padding:30px; font-size:14px; line-height:1.5; }
+  .empty-state .big { font-size:38px; display:block; margin-bottom:8px; }
+  .chat-input-row { display:flex; gap:8px; padding:10px 12px; background:var(--surface); border-top:1px solid var(--border); flex-shrink:0; align-items:center; position:relative; }
+  .chat-input-row input { flex:1; min-width:0; border:1.5px solid var(--border); border-radius:20px; padding:11px 16px; font-size:14.5px; background:var(--bg); color:var(--text); }
+  .round-btn { width:40px; height:40px; border-radius:50%; flex-shrink:0; font-size:18px; display:flex; align-items:center; justify-content:center; background:var(--surface-2); }
+  .send-btn { background:var(--accent); color:var(--accent-ink); }
+  .sticker-panel { position:absolute; bottom:100%; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); padding:10px 12px 12px; z-index:5; box-shadow:0 -8px 24px rgba(0,0,0,.06); }
+  .stk-tabs { display:flex; gap:6px; margin-bottom:8px; }
+  .stk-tab { flex:1; padding:8px 4px; border-radius:10px; background:var(--surface-2); font-weight:600; font-size:13px; }
+  .stk-tab.active { background:var(--accent); color:var(--accent-ink); }
+  .stk-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(50px, 1fr)); gap:6px; max-height:210px; overflow-y:auto; padding-top:4px; }
+  .sticker-panel-like .stk { position:relative; font-size:30px; text-align:center; padding:6px 0; border-radius:10px; cursor:pointer; min-height:52px; display:flex; align-items:center; justify-content:center; }
+  .sticker-panel-like .stk img { width:46px; height:46px; object-fit:contain; }
+  .sticker-panel-like .stk .gif-badge { position:absolute; bottom:2px; left:50%; transform:translateX(-50%); font-size:9px; font-weight:700; background:rgba(0,0,0,.6); color:#fff; padding:1px 5px; border-radius:6px; }
+  .sticker-panel .stk { position:relative; font-size:30px; text-align:center; padding:6px 0; border-radius:10px; cursor:pointer; min-height:52px; display:flex; align-items:center; justify-content:center; }
+  .sticker-panel .stk:active { background:var(--surface-2); }
+  .sticker-panel .stk img { width:46px; height:46px; object-fit:contain; }
+  .fav-star { position:absolute; top:0; right:0; width:20px; height:20px; font-size:11px; line-height:20px; border-radius:50%; background:var(--surface); box-shadow:0 1px 4px rgba(0,0,0,.18); color:#D4A72C; padding:0; }
+  .stk-del { position:absolute; top:0; left:0; width:20px; height:20px; font-size:10px; line-height:20px; border-radius:50%; background:var(--surface); box-shadow:0 1px 4px rgba(0,0,0,.18); padding:0; }
+  .stk-create { font-size:12.5px !important; font-weight:600; color:var(--accent); border:2px dashed var(--border); line-height:1.2; }
+  .stk-empty { grid-column:1 / -1; text-align:center; color:var(--text-soft); font-size:13px; padding:16px 8px; line-height:1.5; }
+  .bubble-row .bubble.sticker-bubble { background:none; box-shadow:none; padding:0; }
+  .gif-canvas { width:140px; height:140px; display:block; }
+  .sticker-panel .stk .gif-badge { position:absolute; bottom:2px; left:50%; transform:translateX(-50%); font-size:9px; font-weight:700; background:rgba(0,0,0,.6); color:#fff; padding:1px 5px; border-radius:6px; }
+  .stk-canvas.picking { cursor:crosshair; }
+  .sticker-bubble img { width:140px; height:140px; object-fit:contain; display:block; }
+  .stk-canvas { display:block; margin:0 auto 14px; width:190px; height:190px; border-radius:16px; background:conic-gradient(#eee 25%, #fff 0 50%, #eee 0 75%, #fff 0) 0 0 / 20px 20px; }
+  .video-wrap { position:relative; }
+  .video-wrap::after { content:"▶"; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:46px; height:46px; border-radius:50%; background:rgba(0,0,0,.5); color:#fff; display:flex; align-items:center; justify-content:center; font-size:18px; pointer-events:none; }
+  .video-missing { padding:16px 14px; font-size:13.5px; opacity:.8; }
+  #ivVideo { max-width:100%; max-height:100%; display:none; }
+
+  .draw-toolbar { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--surface); border-top:1px solid var(--border); flex-shrink:0; overflow-x:auto; }
+  .color-swatch { width:26px; height:26px; border-radius:50%; flex-shrink:0; border:2px solid transparent; cursor:pointer; }
+  .color-swatch.selected { border-color:var(--text); transform:scale(1.12); }
+  .brush-size { width:70px; flex-shrink:0; accent-color:var(--accent); }
+  .tool-btn { width:34px; height:34px; border-radius:10px; font-size:16px; flex-shrink:0; background:var(--surface-2); }
+  .tool-btn.on { outline:2px solid var(--accent); }
+  .done-btn { padding:8px 14px; border-radius:12px; background:var(--accent); color:var(--accent-ink); font-weight:600; flex-shrink:0; margin-left:auto; font-size:13.5px; }
+
+  /* ---- llamadas ---- */
+  #callsList { flex:1; overflow-y:auto; padding:16px 14px 24px; }
+  .calls-inner { max-width:560px; margin:0 auto; }
+  .section-title { font-size:12px; font-weight:700; color:var(--text-soft); margin:8px 4px 10px; text-transform:uppercase; letter-spacing:.05em; }
+  .person-row { display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:10px 12px; margin-bottom:8px; }
+  .person-row .avatar-dot { width:42px; height:42px; font-size:17px; position:relative; }
+  .person-row .avatar-dot::after { content:""; position:absolute; right:-1px; bottom:-1px; width:12px; height:12px; border-radius:50%; background:#30A46C; border:2px solid var(--surface); }
+  .pname { flex:1; font-weight:600; min-width:0; }
+  .pname small { display:block; color:var(--text-soft); font-weight:500; font-size:12px; margin-top:2px; }
+  .call-action { width:44px; height:44px; border-radius:50%; background:var(--surface-2); font-size:19px; flex-shrink:0; }
+  .call-action.video { background:var(--accent); color:var(--accent-ink); }
+  .info-card { background:var(--surface-2); border-radius:16px; padding:14px 16px; font-size:13.5px; color:var(--text-soft); line-height:1.55; margin-bottom:18px; }
+  .info-card b { color:var(--text); }
+  .log-row { display:flex; align-items:center; gap:10px; font-size:13.5px; padding:9px 4px; border-bottom:1px solid var(--border); }
+  .log-row .when { margin-left:auto; color:var(--text-soft); font-size:12px; }
+  .log-row .missed { color:#C0392B; }
+
+  .bottom-nav { display:flex; background:var(--surface); border-top:1px solid var(--border); flex-shrink:0; padding-bottom:var(--safe-bottom); }
+  .nav-btn { flex:1; padding:10px 4px 8px; display:flex; flex-direction:column; align-items:center; gap:2px; font-size:11px; color:var(--text-soft); font-weight:600; position:relative; }
+  .nav-btn .emoji { font-size:21px; }
+  .nav-btn.active { color:var(--accent); }
+  .nav-btn.has-new::after { content:""; position:absolute; top:8px; left:calc(50% + 10px); width:9px; height:9px; border-radius:50%; background:#E5484D; }
+
+  .modal-backdrop { position:fixed; inset:0; background:rgba(30,20,15,0.4); display:none; align-items:flex-end; justify-content:center; z-index:50; }
+  .modal-backdrop.open { display:flex; }
+  .modal-sheet { background:var(--surface); width:100%; max-width:480px; border-radius:22px 22px 0 0; padding:22px 20px; max-height:82vh; overflow-y:auto; padding-bottom:calc(22px + var(--safe-bottom)); }
+  .modal-sheet h3 { font-family:var(--font-display); margin:0 0 16px; font-size:19px; }
+  .modal-section { margin-bottom:20px; }
+  .modal-section .label { font-size:12.5px; font-weight:700; color:var(--text-soft); margin-bottom:8px; }
+  .modal-section .hint { font-size:12.5px; color:var(--text-soft); margin-top:6px; line-height:1.45; }
+  .theme-row { display:flex; gap:10px; }
+  .theme-swatch { flex:1; height:46px; border-radius:12px; border:2.5px solid transparent; cursor:pointer; }
+  .theme-swatch.selected { border-color:var(--text); }
+  .modal-close-btn { width:100%; padding:12px; border-radius:12px; background:var(--surface-2); font-weight:600; margin-top:4px; font-size:14px; }
+  .link-btn { color:var(--accent); font-weight:600; font-size:13.5px; }
+
+  /* ---- pantalla de llamada ---- */
+  .call-overlay { position:fixed; inset:0; z-index:100; background:linear-gradient(160deg,#2E2636,#141118); color:#fff; display:none; overflow:hidden; }
+  .call-overlay.open { display:block; }
+  #remoteVideo { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#000; opacity:0; }
+  .call-overlay.has-remote-video #remoteVideo { opacity:1; }
+  #localVideo { position:absolute; top:calc(16px + var(--safe-top)); right:16px; width:110px; height:150px; object-fit:cover; border-radius:16px; transform:scaleX(-1); background:#000; box-shadow:0 8px 24px rgba(0,0,0,.4); display:none; z-index:2; }
+  .call-overlay.has-local #localVideo { display:block; }
+  .call-overlay.self #localVideo { top:0; right:0; width:100%; height:100%; border-radius:0; box-shadow:none; }
+  .call-center { position:absolute; left:0; right:0; top:16%; text-align:center; z-index:3; padding:0 20px; text-shadow:0 1px 8px rgba(0,0,0,.5); }
+  .call-overlay.has-remote-video .call-center, .call-overlay.self.has-local .call-center { top:calc(20px + var(--safe-top)); }
+  .call-overlay.has-remote-video .call-avatar, .call-overlay.self.has-local .call-avatar { display:none; }
+  .call-overlay.has-remote-video .call-name, .call-overlay.self.has-local .call-name { font-size:19px; }
+  .call-avatar { width:112px; height:112px; border-radius:50%; margin:0 auto 18px; display:flex; align-items:center; justify-content:center; font-size:46px; font-weight:600; font-family:var(--font-display); }
+  .call-overlay.ringing .call-avatar { animation:pulse 1.4s ease-out infinite; }
+  @keyframes pulse { 0% { box-shadow:0 0 0 0 rgba(255,255,255,.45); } 100% { box-shadow:0 0 0 28px rgba(255,255,255,0); } }
+  .call-name { font-family:var(--font-display); font-size:27px; font-weight:600; }
+  .call-status { opacity:.85; margin-top:6px; font-size:15px; }
+  .call-controls { position:absolute; left:0; right:0; bottom:calc(36px + var(--safe-bottom)); display:flex; justify-content:center; gap:22px; z-index:4; }
+  .call-btn { width:64px; height:64px; border-radius:50%; background:rgba(255,255,255,.18); font-size:25px; color:#fff; -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; }
+  .call-btn.off { background:#fff; color:#222; }
+  .call-btn.hang { background:#E5484D; }
+  .call-btn.hang span { display:inline-block; transform:rotate(135deg); }
+  .call-btn.accept { background:#30A46C; }
+  #incomingControls { display:none; }
+  .call-overlay.incoming #incomingControls { display:flex; }
+  .call-overlay.incoming #callControls, .call-overlay.ended .call-controls { display:none; }
+
+  .toast { position:fixed; left:50%; bottom:150px; transform:translateX(-50%); background:var(--text); color:var(--bg); padding:10px 16px; border-radius:14px; font-size:13.5px; z-index:200; opacity:0; transition:opacity .25s; pointer-events:none; width:max-content; max-width:calc(100% - 32px); text-align:center; }
+  .toast.show { opacity:1; }
+  .seg { display:flex; background:var(--surface-2); border-radius:14px; padding:4px; margin:14px 0 18px; }
+  .seg-btn { flex:1; padding:10px; border-radius:11px; font-weight:600; font-size:14px; color:var(--text-soft); }
+  .seg-btn.active { background:var(--surface); color:var(--text); box-shadow:0 2px 8px rgba(0,0,0,.06); }
+  .loading { margin:auto; color:var(--text-soft); font-size:15px; text-align:center; line-height:1.6; padding:20px; }
+  .loading .big { font-size:40px; display:block; margin-bottom:6px; }
+  .avatar-dot { background-size:cover; background-position:center; }
+  @media (max-width:420px) {
+    .chat-input-row { gap:5px; padding:10px 8px; }
+    .chat-input-row .round-btn { width:35px; height:35px; font-size:16px; }
+    .chat-input-row input { padding:10px 12px; }
+  }
+  /* fotos en el chat */
+  .bubble.photo-bubble { padding:4px; }
+  .msg-img { display:block; max-width:min(240px, 60vw); max-height:300px; border-radius:12px; cursor:zoom-in; }
+  .photo-bubble .time { padding:0 6px 2px; }
+  .img-viewer { position:fixed; inset:0; z-index:95; background:rgba(0,0,0,.94); display:none; align-items:center; justify-content:center; }
+  .img-viewer.open { display:flex; }
+  #ivImg { max-width:100%; max-height:100%; object-fit:contain; }
+  .iv-head { position:absolute; top:calc(12px + var(--safe-top)); left:12px; right:12px; display:flex; gap:8px; align-items:center; color:#fff; z-index:2; }
+  .iv-who { flex:1; font-weight:600; font-size:14px; text-shadow:0 1px 6px rgba(0,0,0,.6); }
+  /* audios de voz */
+  .audio-msg { display:flex; align-items:center; gap:10px; min-width:190px; }
+  .audio-play { width:34px; height:34px; border-radius:50%; background:rgba(0,0,0,.08); font-size:13px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .bubble-row.me .audio-play { background:rgba(255,255,255,.28); }
+  .audio-track { flex:1; height:4px; border-radius:2px; background:rgba(0,0,0,.12); overflow:hidden; cursor:pointer; }
+  .bubble-row.me .audio-track { background:rgba(255,255,255,.35); }
+  .audio-track i { display:block; height:100%; width:0; background:currentColor; }
+  .audio-time { font-size:11.5px; opacity:.75; min-width:36px; text-align:right; }
+  .rec-dot { width:11px; height:11px; border-radius:50%; background:#E5484D; flex-shrink:0; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:.2; } }
+  .rec-label { flex:1; font-weight:600; font-size:14.5px; }
+  /* música de las stories */
+  .music-chip { display:flex; align-items:center; gap:10px; background:var(--surface-2); border-radius:12px; padding:8px 10px; margin-bottom:8px; }
+  .music-chip img, .song-row img { width:44px; height:44px; border-radius:8px; flex-shrink:0; background:var(--border); object-fit:cover; }
+  .mtxt { flex:1; min-width:0; }
+  .mtxt b, .mtxt small { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mtxt small { color:var(--text-soft); font-size:12.5px; margin-top:2px; }
+  .music-search { width:100%; padding:12px 14px; border-radius:12px; border:1.5px solid var(--border); background:var(--bg); font-size:15px; color:var(--text); }
+  .music-search:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  .music-list { max-height:48vh; overflow-y:auto; }
+  .song-row { display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid var(--border); cursor:pointer; }
+  .song-row:active { background:var(--surface-2); }
+  .song-play, .chip-x { width:36px; height:36px; border-radius:50%; background:var(--surface-2); flex-shrink:0; font-size:13px; }
+  .music-chip .chip-x { background:var(--surface); }
+  .sv-music { position:absolute; left:50%; bottom:calc(28px + var(--safe-bottom)); transform:translateX(-50%); z-index:4; display:flex; align-items:center; gap:8px; background:rgba(0,0,0,.5); padding:6px 14px 6px 6px; border-radius:30px; max-width:85%; font-size:13.5px; }
+  .sv-music img { width:32px; height:32px; border-radius:6px; object-fit:cover; }
+  .sv-music span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .confirm-backdrop { position:fixed; inset:0; background:rgba(30,20,15,.45); display:none; align-items:center; justify-content:center; z-index:150; padding:20px; }
+  .confirm-backdrop.open { display:flex; }
+  .confirm-box { background:var(--surface); color:var(--text); border-radius:20px; padding:22px 20px 18px; max-width:360px; width:100%; box-shadow:0 16px 40px rgba(0,0,0,.2); }
+  .confirm-text { font-size:15px; line-height:1.5; margin-bottom:18px; }
+  .confirm-btns { display:flex; gap:10px; }
+  .confirm-btns button { flex:1; padding:12px; border-radius:12px; font-weight:600; font-size:14.5px; }
+  .confirm-no { background:var(--surface-2); }
+  .confirm-yes { background:#E5484D; color:#fff; }
+  .confirm-yes.safe { background:var(--accent); color:var(--accent-ink); }
+  .profile-row { display:flex; align-items:center; gap:14px; margin-bottom:12px; }
+  .profile-big { width:64px; height:64px; font-size:26px; }
+  .profile-name { font-family:var(--font-display); font-size:18px; font-weight:600; }
+  .name-edit { display:flex; gap:8px; margin-top:4px; }
+  .name-edit input { flex:1; min-width:0; padding:11px 14px; border-radius:12px; border:1.5px solid var(--border); background:var(--bg); font-size:15px; color:var(--text); }
+  .name-edit input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  .name-edit .btn-primary { width:auto; margin-top:0; padding:11px 16px; font-size:14px; flex-shrink:0; }
+  .welcome-btns { display:flex; flex-direction:column; gap:10px; margin-top:8px; }
+  .welcome-btns .btn-primary { margin-top:0; }
+  .bubble-row.me .bubble { cursor:pointer; }
+  .row-del { opacity:.8; }
+  textarea.story-input { width:100%; min-height:70px; resize:vertical; padding:12px 14px; border-radius:12px; border:1.5px solid var(--border); background:var(--bg); font-size:15px; color:var(--text); font-family:var(--font-body); }
+  textarea.story-input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+
+  /* ---- stories ---- */
+  .stories-wrap { flex:1; overflow-y:auto; padding:14px 12px 90px; }
+  .stories-inner { max-width:640px; margin:0 auto; }
+  .story-person { display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:10px 14px; margin-bottom:8px; cursor:pointer; }
+  .story-person:active { background:var(--surface-2); }
+  .story-avatar { width:58px; height:58px; border-radius:50%; padding:3px; background:conic-gradient(var(--accent), #E85D75, #D4A72C, var(--accent)); flex-shrink:0; }
+  .story-avatar.seen { background:var(--border); }
+  .story-avatar > div { width:100%; height:100%; border-radius:50%; border:3px solid var(--surface); display:flex; align-items:center; justify-content:center; font-weight:700; color:#fff; font-size:20px; background-size:cover; background-position:center; }
+  .story-info { flex:1; min-width:0; }
+  .story-info .sname { font-weight:600; font-family:var(--font-display); font-size:15px; }
+  .story-info .swhen { color:var(--text-soft); font-size:12.5px; margin-top:2px; }
+  /* La story se diseña en un marco vertical 9:16; el texto se mide en cqw para verse igual en cualquier pantalla */
+  .story-preview { position:relative; height:340px; aspect-ratio:9/16; margin:0 auto 6px; border-radius:18px; overflow:hidden; background-size:contain; background-repeat:no-repeat; background-position:center; container-type:inline-size; touch-action:none; }
+  .story-photo { position:absolute; left:50%; top:50%; width:100%; height:100%; object-fit:contain; pointer-events:none; user-select:none; z-index:0; }
+  .story-ov { position:absolute; transform:translate(-50%,-50%); line-height:1; user-select:none; z-index:2; touch-action:none; }
+  .story-ov img, .story-ov canvas { display:block; width:100%; height:auto; pointer-events:none; }
+  .story-preview .story-ov { cursor:grab; }
+  .story-preview .story-ov.selected { outline:2px dashed rgba(255,255,255,.95); outline-offset:3px; border-radius:6px; }
+  .story-preview.has-photo { cursor:move; }
+  .story-textbox { z-index:3; }
+  .story-hint { text-align:center; font-size:12px; color:var(--text-soft); margin-bottom:14px; }
+  .story-textbox { position:absolute; transform:translate(-50%,-50%); max-width:90%; text-align:center; white-space:pre-wrap; word-break:break-word; line-height:1.2; user-select:none; padding:0.08em 0.2em; border-radius:0.2em; width:max-content; }
+  .story-preview .story-textbox { cursor:grab; outline:1.5px dashed rgba(255,255,255,.75); }
+  .story-preview .story-textbox:active { cursor:grabbing; }
+  .story-textbox.on-photo { text-shadow:0 1px 6px rgba(0,0,0,.65); }
+  .story-textbox.placeholder { opacity:.6; }
+  .font-row { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; }
+  .font-pick { min-width:52px; height:44px; padding:0 10px; border-radius:12px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; cursor:pointer; border:2.5px solid transparent; font-size:18px; flex-shrink:0; white-space:nowrap; }
+  .font-pick.selected { border-color:var(--accent); }
+  .size-row { display:flex; align-items:center; gap:10px; }
+  .size-row input { flex:1; accent-color:var(--accent); }
+  .size-row span { font-weight:700; color:var(--text-soft); }
+  .bg-dot { width:32px; height:32px; border-radius:50%; cursor:pointer; border:3px solid transparent; }
+  .bg-dot.selected { border-color:var(--text); }
+  .photo-row { display:flex; gap:10px; margin-bottom:16px; }
+  .photo-row .btn-primary { margin-top:0; }
+
+  .story-viewer { position:fixed; inset:0; z-index:90; background:#000; color:#fff; display:none; overflow:hidden; user-select:none; }
+  .story-viewer.open { display:block; }
+  .sv-frame { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); height:min(100%, calc(100vw * 16 / 9)); aspect-ratio:9/16; overflow:hidden; background-size:contain; background-repeat:no-repeat; background-position:center; container-type:inline-size; }
+  .sv-bars { position:absolute; top:calc(10px + var(--safe-top)); left:10px; right:10px; display:flex; gap:4px; z-index:4; }
+  .sv-bar { flex:1; height:3px; background:rgba(255,255,255,.35); border-radius:2px; overflow:hidden; }
+  .sv-bar i { display:block; height:100%; width:0; background:#fff; }
+  .sv-head { position:absolute; top:calc(22px + var(--safe-top)); left:12px; right:12px; display:flex; align-items:center; gap:10px; z-index:4; text-shadow:0 1px 6px rgba(0,0,0,.6); }
+  .sv-head .avatar-dot { width:36px; height:36px; font-size:15px; }
+  .sv-head .who { flex:1; min-width:0; font-weight:600; }
+  .sv-head .who small { display:block; font-weight:500; opacity:.8; font-size:12px; }
+  .sv-btn { font-size:20px; width:40px; height:40px; border-radius:50%; background:rgba(0,0,0,.3); color:#fff; flex-shrink:0; }
+  .sv-nav { position:absolute; top:0; bottom:0; width:35%; z-index:3; cursor:pointer; }
+  .sv-nav.left { left:0; } .sv-nav.right { right:0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="setup-wrap" id="welcomeScreen" style="display:none;">
+    <div class="setup-card">
+      <h1>💬 Chat Familiar</h1>
+      <p class="lead">Chats para la familia, sin número de teléfono. Crea un chat nuevo o entra en uno que ya exista.</p>
+      <div class="welcome-btns">
+        <button class="btn-primary" id="welcomeCreateBtn">＋ Crear chat</button>
+        <button class="btn-primary secondary" id="welcomeJoinBtn">🔑 Entrar en un chat</button>
+        <button class="btn-primary secondary" id="welcomeImportBtn">📂 Cargar una copia</button>
+      </div>
+      <p class="lead" id="welcomeNote" style="margin:16px 0 0; font-size:13px;">Cualquiera que ponga el mismo nombre de chat y contraseña, desde cualquier móvil u ordenador, entra en el mismo chat.</p>
+      <p class="lead cloud-status" style="margin:8px 0 0; font-size:12.5px;"></p>
+    </div>
+  </div>
+
+  <div id="mainApp" style="display:none; flex:1; flex-direction:column; overflow:hidden;">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn back-btn" id="backBtn" aria-label="Volver a los chats" style="display:none;">←</button>
+        <h2 id="groupNameLabel">Chats</h2>
+        <button class="icon-btn" id="chatMenuBtn" aria-label="Opciones del chat" style="display:none; font-size:16px;">✏️</button>
+      </div>
+      <div class="me-chip"><span id="cloudDot" style="font-size:11px; cursor:help;" title="Conexión con el servidor"></span><span id="meLabel"></span><button class="icon-btn" id="settingsBtn" aria-label="Ajustes">⚙️</button></div>
+    </div>
+
+    <div class="tab-content active" id="chatTab">
+      <div class="chats-home" id="chatsHome">
+        <div id="chatsList"></div>
+        <div class="home-actions">
+          <button class="home-btn secondary" id="joinChatBtn">🔑 Entrar en un chat</button>
+          <button class="home-btn" id="newChatBtn">＋ Crear chat</button>
+        </div>
+      </div>
+      <div id="chatView" style="display:none; flex:1; flex-direction:column; overflow:hidden;">
+        <div class="chat-stage" id="chatStage">
+          <canvas id="bgCanvas"></canvas>
+          <div id="chatList"></div>
+          <div class="draw-hint">🖌️ Pinta sobre el fondo del chat</div>
+          <div class="remote-drawing" id="remoteDrawing"></div>
+        </div>
+        <div class="chat-input-row" id="chatInputRow">
+          <button class="round-btn" id="stickerToggleBtn" aria-label="Stickers">😊</button>
+          <button class="round-btn" id="drawToggleBtn" aria-label="Dibujar en el fondo">🖌️</button>
+          <input type="text" id="msgInput" placeholder="Escribe un mensaje..." maxlength="500">
+          <button class="round-btn" id="photoBtn" aria-label="Mandar foto o vídeo">📷</button>
+          <input type="file" id="photoFile" accept="image/*,video/*" style="display:none;">
+          <button class="round-btn" id="micBtn" aria-label="Grabar audio">🎤</button>
+          <button class="round-btn send-btn" id="sendBtn" aria-label="Enviar">➤</button>
+          <div class="sticker-panel" id="stickerPanel" style="display:none;"></div>
+        </div>
+        <div class="chat-input-row" id="recordRow" style="display:none;">
+          <button class="round-btn" id="recCancelBtn" aria-label="Cancelar audio">✕</button>
+          <span class="rec-dot"></span><span class="rec-label" id="recLabel">Grabando 0:00</span>
+          <button class="round-btn send-btn" id="recSendBtn" aria-label="Enviar audio">➤</button>
+        </div>
+        <div class="draw-toolbar" id="drawToolbar" style="display:none;">
+          <div id="colorPalette" style="display:flex; gap:8px;"></div>
+          <button class="tool-btn" id="eraserBtn" title="Goma">🧽</button>
+          <input type="range" class="brush-size" id="brushSize" min="2" max="30" value="6" aria-label="Grosor">
+          <button class="tool-btn" id="undoBtn" title="Deshacer mi último trazo">↩️</button>
+          <button class="tool-btn" id="clearBtn" title="Borrar todo el dibujo">🗑️</button>
+          <button class="done-btn" id="drawDoneBtn">Listo</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="storyTab">
+      <div class="stories-wrap"><div class="stories-inner">
+        <div class="section-title">Tus stories</div>
+        <div id="myStories"></div>
+        <div class="section-title">De los demás</div>
+        <div id="otherStories"></div>
+      </div></div>
+      <div class="home-actions">
+        <button class="home-btn" id="newStoryBtn">＋ Publicar story</button>
+      </div>
+    </div>
+
+    <div class="tab-content" id="callsTab">
+      <div id="callsList"><div class="calls-inner">
+        <div class="section-title">Conectados ahora</div>
+        <div id="peersList"></div>
+        <div class="section-title">Historial</div>
+        <div id="callLog"></div>
+      </div></div>
+    </div>
+
+    <div class="bottom-nav">
+      <button class="nav-btn active" data-tab="chatTab"><span class="emoji">💬</span>Chats</button>
+      <button class="nav-btn" data-tab="storyTab"><span class="emoji">⭕</span>Story</button>
+      <button class="nav-btn" data-tab="callsTab"><span class="emoji">📞</span>Llamadas</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="settingsModal">
+    <div class="modal-sheet">
+      <h3>Ajustes</h3>
+      <div class="modal-section">
+        <div class="label">Tu perfil</div>
+        <div class="profile-row">
+          <div class="avatar-dot profile-big" id="profileAvatar">?</div>
+          <div class="profile-name" id="profileName"></div>
+        </div>
+        <div class="photo-row" id="profileBtns">
+          <button class="btn-primary secondary" id="profilePhotoBtn">📷 Cambiar foto</button>
+          <button class="btn-primary secondary" id="profileNoPhotoBtn">✖ Quitar foto</button>
+        </div>
+        <input type="file" id="profilePhotoFile" accept="image/*" style="display:none;">
+        <div class="name-edit" id="profileNameEdit">
+          <input type="text" id="profileNameInput" maxlength="20" autocomplete="off" aria-label="Tu nombre">
+          <button class="btn-primary" id="profileNameSave">Guardar nombre</button>
+        </div>
+        <div class="error-msg" id="profileNameError" style="min-height:0;"></div>
+        <div class="hint" id="profileHint"></div>
+      </div>
+      <div class="modal-section"><div class="label">Colores de la app</div><div class="theme-row" id="themeRow"></div></div>
+      <div class="modal-section">
+        <div class="label">Tus datos (archivo JSON)</div>
+        <button class="btn-primary secondary" id="exportBtn">💾 Descargar copia</button>
+        <button class="btn-primary secondary" id="importBtn">📂 Cargar copia</button>
+        <input type="file" id="importFile" accept=".json,application/json" style="display:none;">
+        <div class="hint">Todo se guarda en este aparato. Descarga una copia de vez en cuando para no perder nada.</div>
+      </div>
+      <div class="modal-section">
+        <div class="label">Servidor</div>
+        <div class="hint cloud-status" style="margin-top:0;"></div>
+        <div class="hint">Es un servidor público de prueba: perfecto para enseñar la app, pero mejor no mandar cosas privadas de verdad.</div>
+      </div>
+      <div class="modal-section">
+        <button class="btn-primary secondary" id="logoutBtn">🚪 Cerrar sesión</button>
+        <div class="hint">Quita tus chats de este aparato. Para volver, entra con el nombre del chat, tu nombre y la contraseña.</div>
+      </div>
+      <button class="modal-close-btn" id="closeSettingsBtn">Cerrar</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="chatModal">
+    <div class="modal-sheet">
+      <h3 id="chatModalTitle">Crear chat</h3>
+      <p class="modal-lead" id="chatModalLead"></p>
+      <div class="field"><label>Nombre del chat</label><input type="text" id="chatNameInput" maxlength="30" autocomplete="off"></div>
+      <div class="field" id="userNameField"><label>Tu nombre</label><input type="text" id="userNameInput" maxlength="20" autocomplete="off"></div>
+      <div class="field"><label id="chatPassLabel">Contraseña del chat</label><input type="password" id="chatPassInput" maxlength="40" autocomplete="new-password"></div>
+      <div class="field" id="userColorField"><label>Tu color</label><div class="swatch-row" id="colorSwatchRow"></div></div>
+      <div class="field" id="chatEmojiField"><label>Icono del chat</label><div class="swatch-row" id="chatEmojiRow"></div></div>
+      <button class="btn-primary" id="chatSaveBtn">Crear chat</button>
+      <div class="error-msg" id="chatError"></div>
+      <button class="link-btn" id="chatDeleteBtn" style="color:#C0392B; display:none; margin-top:6px;">🗑️ Borrar este chat</button>
+      <button class="modal-close-btn" id="chatCancelBtn" style="margin-top:14px;">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="storyModal">
+    <div class="modal-sheet">
+      <h3>Publicar story</h3>
+      <div class="story-preview" id="storyPreview"><div class="story-textbox" id="storyTextBox"></div></div>
+      <div class="story-hint" id="storyHint">Arrastra el texto o los stickers para moverlos</div>
+      <div class="photo-row" style="margin-bottom:12px;">
+        <button class="btn-primary secondary" id="storyStkBtn">😊 Stickers y emojis</button>
+      </div>
+      <div class="field" id="storyOvField" style="display:none;"><label>Sticker elegido</label>
+        <div class="size-row"><span>－</span><input type="range" id="storyOvSize" min="8" max="80" value="25" aria-label="Tamaño del sticker"><span>＋</span></div>
+        <button class="link-btn" id="storyOvDel" style="color:#C0392B; margin-top:8px;">🗑️ Quitar este sticker</button>
+      </div>
+      <div class="field" id="storyZoomField" style="display:none;"><label>Ampliar la foto</label>
+        <div class="size-row"><span>🔍－</span><input type="range" id="storyZoom" min="1" max="4" step="0.05" value="1" aria-label="Ampliar la foto"><span>🔍＋</span></div>
+        <div class="hint" style="font-size:12.5px; color:var(--text-soft); margin-top:4px;">Arrastra la foto para colocarla donde quieras.</div>
+      </div>
+      <div class="field"><label>Texto</label><textarea class="story-input" id="storyText" maxlength="200" placeholder="¿Qué quieres contar?"></textarea></div>
+      <div class="field"><label>Tipo de letra</label><div class="font-row" id="storyFontRow"></div></div>
+      <div class="field"><label>Color de la letra</label><div class="swatch-row" id="storyTcRow"></div></div>
+      <div class="field"><label>Tamaño de la letra</label><div class="size-row"><span style="font-size:13px">A</span><input type="range" id="storySize" min="4" max="20" step="0.5" value="9" aria-label="Tamaño de la letra"><span style="font-size:22px">A</span></div></div>
+      <div class="field"><label>Música</label>
+        <div class="music-chip" id="storyMusicChip" style="display:none;"></div>
+        <button class="btn-primary secondary" id="storyMusicBtn">🎵 Añadir música</button>
+      </div>
+      <div class="photo-row">
+        <button class="btn-primary secondary" id="storyPhotoBtn">📷 Añadir foto</button>
+        <button class="btn-primary secondary" id="storyNoPhotoBtn" style="display:none;">✖ Quitar foto</button>
+        <input type="file" id="storyPhotoFile" accept="image/*" style="display:none;">
+      </div>
+      <div class="field" id="storyBgField"><label>Color de fondo</label><div class="swatch-row" id="storyBgRow"></div></div>
+      <div class="field" id="storyNameField"><label>Tu nombre</label><input type="text" id="storyNameInput" maxlength="20" autocomplete="off"></div>
+      <button class="btn-primary" id="storyPublishBtn">Publicar</button>
+      <div class="error-msg" id="storyError"></div>
+      <button class="modal-close-btn" id="storyCancelBtn" style="margin-top:6px;">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="stickerModal" style="z-index:60;">
+    <div class="modal-sheet">
+      <h3>Crear sticker o GIF</h3>
+      <canvas class="stk-canvas" id="stkCanvas" width="256" height="256"></canvas>
+      <div class="story-hint" id="stkHint">Elige una foto o un vídeo</div>
+      <div class="photo-row">
+        <button class="btn-primary secondary" id="stkPhotoBtn">📷 Foto</button>
+        <button class="btn-primary secondary" id="stkVideoBtn">🎬 Vídeo → GIF</button>
+        <input type="file" id="stkFile" accept="image/*" style="display:none;">
+        <input type="file" id="stkVideoFile" accept="video/*" style="display:none;">
+      </div>
+      <div class="field" id="stkClipField" style="display:none;"><label>Trozo del vídeo</label>
+        <input type="range" id="stkStart" min="0" max="0" step="0.1" value="0" style="width:100%; accent-color:var(--accent);" aria-label="Desde qué segundo">
+        <div class="hint" id="stkStartLabel" style="font-size:12.5px; color:var(--text-soft);"></div>
+      </div>
+      <div class="field" id="stkBgField" style="display:none;"><label>Quitar el fondo</label>
+        <div class="photo-row" style="margin-bottom:8px;">
+          <button class="btn-primary secondary" id="stkAutoBg">✨ Automático</button>
+          <button class="btn-primary secondary" id="stkUndoBg">↩️ Deshacer</button>
+        </div>
+        <div class="size-row"><span style="font-size:12.5px;">Precisión</span><input type="range" id="stkTol" min="10" max="130" value="45" aria-label="Precisión al quitar el fondo"><span style="font-size:12.5px;">Más</span></div>
+        <div class="hint" style="font-size:12.5px; color:var(--text-soft); margin-top:6px;">También puedes tocar el fondo en la imagen para borrarlo. Sale mejor si el fondo es de un solo color.</div>
+      </div>
+      <div class="field"><label>Forma</label>
+        <div class="seg" id="stkShape" style="margin:0;">
+          <button class="seg-btn active" data-shape="circle">⚪ Redondo</button>
+          <button class="seg-btn" data-shape="square">⬛ Cuadrado</button>
+          <button class="seg-btn" data-shape="none">✂️ Sin forma</button>
+        </div>
+      </div>
+      <div class="field"><label>Texto (opcional)</label><input type="text" class="music-search" id="stkText" maxlength="18" autocomplete="off"></div>
+      <button class="btn-primary" id="stkSaveBtn">Guardar sticker</button>
+      <div class="error-msg" id="stkError"></div>
+      <button class="modal-close-btn" id="stkCancelBtn" style="margin-top:6px;">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="storyStkModal" style="z-index:60;">
+    <div class="modal-sheet">
+      <h3>Poner en la story</h3>
+      <div class="stk-tabs" id="storyStkTabs"></div>
+      <div class="stk-grid sticker-panel-like" id="storyStkGrid" style="max-height:48vh;"></div>
+      <button class="modal-close-btn" id="storyStkCancel" style="margin-top:12px;">Cerrar</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="musicModal" style="z-index:60;">
+    <div class="modal-sheet">
+      <h3>Elegir música</h3>
+      <input type="search" class="music-search" id="musicSearch" placeholder="Busca una canción o un artista…" autocomplete="off">
+      <div class="section-title" id="musicListTitle" style="margin-top:14px;">Lo más escuchado ahora</div>
+      <div class="music-list" id="musicList"></div>
+      <button class="modal-close-btn" id="musicCancelBtn" style="margin-top:12px;">Cerrar</button>
+    </div>
+  </div>
+
+  <div class="story-viewer" id="storyViewer">
+    <div class="sv-frame" id="svFrame"></div>
+    <div class="sv-music" id="svMusic" style="display:none;"></div>
+    <div class="sv-bars" id="svBars"></div>
+    <div class="sv-head">
+      <div class="avatar-dot" id="svAvatar">?</div>
+      <div class="who"><span id="svName"></span><small id="svWhen"></small></div>
+      <button class="sv-btn" id="svMute" aria-label="Silenciar música" style="display:none;">🔊</button>
+      <button class="sv-btn" id="svDelete" aria-label="Borrar story" style="display:none;">🗑️</button>
+      <button class="sv-btn" id="svClose" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="sv-nav left" id="svPrev"></div>
+    <div class="sv-nav right" id="svNext"></div>
+  </div>
+
+  <div class="call-overlay" id="callOverlay">
+    <video id="remoteVideo" autoplay playsinline></video>
+    <video id="localVideo" autoplay playsinline muted></video>
+    <div class="call-center">
+      <div class="call-avatar" id="callAvatar">?</div>
+      <div class="call-name" id="callName"></div>
+      <div class="call-status" id="callStatus"></div>
+    </div>
+    <div class="call-controls" id="callControls">
+      <button class="call-btn" id="muteBtn" aria-label="Silenciar micro">🎤</button>
+      <button class="call-btn" id="camBtn" aria-label="Apagar cámara">📷</button>
+      <button class="call-btn hang" id="hangBtn" aria-label="Colgar"><span>📞</span></button>
+    </div>
+    <div class="call-controls" id="incomingControls">
+      <button class="call-btn hang" id="rejectBtn" aria-label="Rechazar"><span>📞</span></button>
+      <button class="call-btn accept" id="acceptBtn" aria-label="Aceptar">📞</button>
+    </div>
+  </div>
+
+  <div class="img-viewer" id="imgViewer">
+    <img id="ivImg" alt="Foto">
+    <video id="ivVideo" controls playsinline></video>
+    <div class="iv-head">
+      <span class="iv-who" id="ivWho"></span>
+      <button class="sv-btn" id="ivDelete" aria-label="Borrar foto" style="display:none;">🗑️</button>
+      <button class="sv-btn" id="ivDownload" aria-label="Descargar foto">⬇️</button>
+      <button class="sv-btn" id="ivClose" aria-label="Cerrar">✕</button>
+    </div>
+  </div>
+
+  <div class="confirm-backdrop" id="confirmModal">
+    <div class="confirm-box" role="dialog" aria-modal="true">
+      <div class="confirm-text" id="confirmText"></div>
+      <div class="confirm-btns">
+        <button class="confirm-no" id="confirmNo">Cancelar</button>
+        <button class="confirm-yes" id="confirmYes">Borrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<!-- Para hablar con el servidor de prueba compartido (si no carga, la app funciona solo en este aparato) -->
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  var THEMES = ["amanecer","menta","cielo","lavanda"];
+  var THEME_PREVIEW = { amanecer:"linear-gradient(135deg,#F08A5D,#FFD9BB)", menta:"linear-gradient(135deg,#3FA796,#BDEDDD)", cielo:"linear-gradient(135deg,#4F86C6,#C9E2FF)", lavanda:"linear-gradient(135deg,#8E6BC7,#E4D6FA)" };
+  var USER_COLORS = ["#F08A5D","#3FA796","#4F86C6","#8E6BC7","#E85D75","#D4A72C","#5CA46A","#4A6FA5"];
+  var BRUSH_COLORS = ["#402A22","#F08A5D","#E85D75","#D4A72C","#3FA796","#4F86C6","#8E6BC7","#FFFFFF"];
+  var STORY_BGS = ["#F08A5D","#E85D75","#8E6BC7","#4F86C6","#3FA796","#D4A72C","#402A22"];
+  var STICKERS = ["😂","🤣","😊","😍","🥰","😘","😎","🤩","🥳","😇","🙂","😉","😋","😜","🤪","🤗","🤔","🤭","😴","😢","😭","🥺","😮","😱","😡","🤯","🙄","😅","👍","👏","🙏","💪","👋","🤝","❤️","💕","💯","🔥","🌟","✨","🎉","🎂","🎁","🍕","☕","🐶","🐱","🌈","☀️","⚽"];
+  var CHAT_EMOJIS = ["💬","❤️","🏠","🎉","🐶","⚽","🌈","🍕","✈️","🎮","📚","🌟"];
+  var STORY_HOURS = 24;
+  // Cambia en cada versión nueva: así la app sabe si en GitHub hay una más reciente y se actualiza sola
+  var APP_VERSION = "2026-10-22.2";
+
+  var $ = function (id) { return document.getElementById(id); };
+  function loadJSON(k, fallback) { try { var v = JSON.parse(localStorage.getItem(k)); return v === null || v === undefined ? fallback : v; } catch (e) { return fallback; } }
+  function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  function escapeHtml(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+  function rid() { return Math.random().toString(36).slice(2, 10); }
+  function initial(name) { return (name || "?").charAt(0).toUpperCase(); }
+  function fmtTime(iso) { var d = new Date(iso); return d.getHours().toString().padStart(2,"0") + ":" + d.getMinutes().toString().padStart(2,"0"); }
+  function fmtWhen(iso) { var d = new Date(iso); return d.toDateString() === new Date().toDateString() ? fmtTime(iso) : d.toLocaleDateString(); }
+  function fmtAgo(iso) {
+    var m = Math.round((Date.now() - new Date(iso)) / 60000);
+    if (m < 1) return "ahora mismo";
+    if (m < 60) return "hace " + m + " min";
+    return "hace " + Math.round(m / 60) + " h";
+  }
+  function fmtDur(s) { return Math.floor(s / 60).toString().padStart(2, "0") + ":" + (s % 60).toString().padStart(2, "0"); }
+
+  var toastTimer = null;
+  function toast(text) {
+    var t = $("toast"); t.textContent = text; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove("show"); }, 3200);
+  }
+
+  // Ventanita propia de "¿Seguro?": dentro de claude.ai el confirm() del navegador está bloqueado
+  var confirmYesCb = null, confirmNoCb = null;
+  function askConfirm(text, yesLabel, onYes, onNo, safe) {
+    $("confirmText").textContent = text;
+    $("confirmYes").textContent = yesLabel || "Borrar";
+    $("confirmYes").classList.toggle("safe", !!safe);
+    confirmYesCb = onYes; confirmNoCb = onNo || null;
+    $("confirmModal").classList.add("open");
+  }
+  function closeConfirm(yes) {
+    $("confirmModal").classList.remove("open");
+    var cb = yes ? confirmYesCb : confirmNoCb;
+    confirmYesCb = confirmNoCb = null;
+    if (cb) cb();
+  }
+  $("confirmYes").onclick = function () { closeConfirm(true); };
+  $("confirmNo").onclick = function () { closeConfirm(false); };
+  $("confirmModal").onclick = function (e) { if (e.target === $("confirmModal")) closeConfirm(false); };
+
+  // La contraseña del chat nunca se guarda tal cual, solo su huella
+  function hashPass(p) {
+    var text = "chat-familiar:" + p;
+    if (window.crypto && crypto.subtle && window.TextEncoder) {
+      return crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)).then(function (buf) {
+        return Array.prototype.map.call(new Uint8Array(buf), function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+      });
+    }
+    var h = 5381;
+    for (var i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+    return Promise.resolve("s" + (h >>> 0).toString(16));
+  }
+
+  var theme = localStorage.getItem("cf_theme") || "amanecer";
+  document.documentElement.setAttribute("data-theme", THEMES.indexOf(theme) >= 0 ? theme : "amanecer");
+
+  // ===== DATOS: todo en un JSON dentro de este navegador =====
+  var EMPTY = { profiles: [], chats: [], chat_members: [], messages: [], strokes: [], stories: [], seq: 0 };
+  function getDB() {
+    var d = loadJSON("cf_db", null) || {};
+    for (var k in EMPTY) if (d[k] === undefined) d[k] = JSON.parse(JSON.stringify(EMPTY[k]));
+    return d;
+  }
+  function saveDB(d) {
+    if (saveJSON("cf_db", d)) return true;
+    toast("No queda espacio en este navegador. Borra alguna story con foto o algún chat.");
+    return false;
+  }
+  // Los chats en los que he entrado desde este aparato, con el nombre que uso en cada uno
+  function getMine() { return loadJSON("cf_mine", []); }
+  function saveMine(m) { saveJSON("cf_mine", m); }
+  function identityFor(chatId) { var x = getMine().filter(function (m) { return m.chat === chatId; })[0]; return x ? x.user : null; }
+  function lastMe() { return loadJSON("cf_last", null); }
+  function myIds() {
+    var ids = {}; getMine().forEach(function (m) { ids[m.user.id] = true; });
+    var l = lastMe(); if (l) ids[l.id] = true;
+    return ids;
+  }
+  function profilePhoto(uid, d) {
+    if (!uid) return null;
+    var p = (d || getDB()).profiles.filter(function (x) { return x.id === uid; })[0];
+    return p && p.photo ? p.photo : null;
+  }
+  // Pinta un círculo de persona: su foto si tiene, si no la inicial sobre su color
+  function paintAvatar(el, uid, name, color, d) {
+    var photo = profilePhoto(uid, d);
+    el.style.backgroundColor = color || "#999";
+    el.style.backgroundImage = photo ? "url(" + photo + ")" : "none";
+    el.textContent = photo ? "" : initial(name);
+  }
+  function findOrCreateProfile(d, name, color) {
+    var p = d.profiles.filter(function (x) { return x.name.toLowerCase() === name.toLowerCase(); })[0];
+    if (!p) { p = { id: rid() + rid(), name: name, color: color }; d.profiles.push(p); }
+    else if (color) p.color = color;
+    return { id: p.id, name: p.name, color: p.color };
+  }
+
+  // ===== AVISOS ENTRE PESTAÑAS (lo que pasa en una se ve en directo en las otras) =====
+  var TAB_ID = rid() + rid();
+  var bus = (function () {
+    var handlers = [], ch = null, seen = {}, seenList = [];
+    function dispatch(m) {
+      if (!m || m.from === TAB_ID) return;
+      if (m.to && m.to !== TAB_ID) return;
+      // El mismo aviso puede llegar por la pestaña y por el servidor: solo se atiende una vez
+      if (m.mid) { if (seen[m.mid]) return; seen[m.mid] = 1; seenList.push(m.mid); if (seenList.length > 800) delete seen[seenList.shift()]; }
+      handlers.forEach(function (h) { h(m); });
+    }
+    try { ch = new BroadcastChannel("chat-familiar"); ch.onmessage = function (e) { dispatch(e.data); }; } catch (e) { ch = null; }
+    if (!ch) window.addEventListener("storage", function (e) { if (e.key === "cf_bus" && e.newValue) { try { dispatch(JSON.parse(e.newValue)); } catch (x) {} } });
+    return {
+      send: function (m) {
+        m.from = TAB_ID; m.mid = rid() + rid();
+        if (ch) ch.postMessage(m); else { try { localStorage.setItem("cf_bus", JSON.stringify(m)); } catch (e) {} }
+        cloud.live(m);
+      },
+      inject: dispatch,
+      on: function (h) { handlers.push(h); }
+    };
+  })();
+
+  function sha256hex(text) {
+    if (window.crypto && crypto.subtle && window.TextEncoder) {
+      return crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)).then(function (buf) {
+        return Array.prototype.map.call(new Uint8Array(buf), function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+      });
+    }
+    var h1 = 5381, h2 = 52711;
+    for (var i = 0; i < text.length; i++) { var ch = text.charCodeAt(i); h1 = (h1 * 33) ^ ch; h2 = (h2 * 33) ^ ch; }
+    return Promise.resolve(((h1 >>> 0).toString(16) + (h2 >>> 0).toString(16)).padStart(40, "0"));
+  }
+
+  // ===== SERVIDOR DE PRUEBA COMPARTIDO (MQTT público, sin cuentas ni base de datos) =====
+  // Cada chat se guarda como un JSON en una "dirección" secreta que sale de su nombre + contraseña.
+  // Quien pone el mismo nombre y contraseña llega a la misma dirección y ve el mismo chat.
+  //   <dir>/state       JSON del chat (mensajes ligeros, dibujos, miembros, borrados) — se queda guardado
+  //   <dir>/media/<id>  la foto, audio, GIF o vídeo de cada mensaje — se queda guardado
+  //   <dir>/stories     las stories de la gente del chat — se queda guardado
+  //   <dir>/live        avisos al momento: dibujo en directo, quién está conectado, llamadas
+  var cloud = (function () {
+    var BROKER = "wss://broker.emqx.io:8084/mqtt", ROOT = "chat-familiar/v1/";
+    var LIVE = { here: 1, hello: 1, bye: 1, offer: 1, answer: 1, ice: 1, reject: 1, busy: 1, end: 1,
+                 "stroke-start": 1, "stroke-pts": 1, "stroke-end": 1, "stroke-undo": 1, "stroke-clear": 1, profile: 1 };
+    var MAX_MEDIA = 1400000, MAX_MSGS = 300, MAX_STROKES = 400;
+    var client = null, connected = false, subs = {}, waiters = {}, timers = {}, storyCache = {}, pendingMedia = {}, storyFix = {};
+
+    function topicFor(name, pass) { return sha256hex("cfam|" + name.trim().toLowerCase() + "|" + pass).then(function (h) { return ROOT + h.slice(0, 40); }); }
+    function chatOf(base, d) { return (d || getDB()).chats.filter(function (c) { return c.topic === base; })[0] || null; }
+    function myBases() {
+      var d = getDB(), out = {};
+      getMine().forEach(function (m) { var c = chatById(m.chat, d); if (c && c.topic) out[c.topic] = 1; });
+      return Object.keys(out);
+    }
+    function status() {
+      var text = !window.mqtt ? "⚪ Sin conexión al servidor: los chats solo se guardan en este aparato." :
+        connected ? "🟢 Conectada: los chats se comparten entre todos los aparatos." : "🟠 Conectando con el servidor…";
+      document.querySelectorAll(".cloud-status").forEach(function (el) { el.textContent = text; });
+      var dot = document.getElementById("cloudDot");
+      if (dot) { dot.textContent = !window.mqtt ? "⚪" : connected ? "🟢" : "🟠"; dot.title = text; }
+    }
+
+    var triedAlt = false;
+    function connect() {
+      if (!window.mqtt && !triedAlt) {
+        // Plan B: si algún bloqueador impidió cargar la librería, se prueba desde otro sitio
+        triedAlt = true;
+        var s = document.createElement("script");
+        s.src = "https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js";
+        s.onload = function () { connect(); sync(); };
+        document.head.appendChild(s);
+      }
+      if (client || !window.mqtt) { status(); return; }
+      try {
+        client = mqtt.connect(BROKER, { clientId: "cf_" + rid() + rid(), keepalive: 30, reconnectPeriod: 3000, connectTimeout: 10000, clean: true });
+      } catch (e) { client = null; status(); return; }
+      client.on("connect", function () { connected = true; Object.keys(subs).forEach(subscribeAll); status(); });
+      client.on("close", function () { connected = false; status(); });
+      client.on("offline", function () { connected = false; status(); });
+      client.on("error", function () {});
+      client.on("message", onMessage);
+      status();
+    }
+    function subscribeAll(base) {
+      client.subscribe([base + "/state", base + "/live", base + "/media/+", base + "/stories"], { qos: 1 });
+      // Si el servidor no tiene este chat (se creó sin conexión o se perdió), lo subimos nosotros
+      setTimeout(function () {
+        if (received[base] || !connected) return;
+        var c = chatOf(base);
+        if (c && identityFor(c.id)) { received[base] = 1; publishNow(c.id); }
+      }, 4000);
+    }
+    function watch(base) { if (!base || subs[base]) return; subs[base] = 1; if (client && connected) subscribeAll(base); }
+    function sync() {
+      var want = {}; myBases().forEach(function (b) { want[b] = 1; });
+      Object.keys(subs).forEach(function (b) {
+        if (!want[b]) { delete subs[b]; if (client) client.unsubscribe([b + "/state", b + "/live", b + "/media/+", b + "/stories"]); }
+      });
+      Object.keys(want).forEach(watch);
+    }
+
+    // Busca si en esa dirección ya hay un chat guardado. undefined = sin conexión, null = no hay nada
+    function find(base, ms) {
+      return new Promise(function (res) {
+        if (!client || !connected) { res(undefined); return; }
+        var done = false;
+        function fin(v) { if (done) return; done = true; delete waiters[base]; res(v); }
+        waiters[base] = fin;
+        client.subscribe(base + "/state", { qos: 1 }, function (err) { if (err) fin(undefined); });
+        setTimeout(function () { fin(null); }, ms || 4000);
+      });
+    }
+
+    function onMessage(topic, payload) {
+      var parts = topic.split("/"), base = parts.slice(0, 3).join("/"), kind = parts[3], text = payload.toString();
+      if (kind === "state") {
+        var st = null; try { st = text ? JSON.parse(text) : null; } catch (e) {}
+        received[base] = 1;
+        if (waiters[base]) waiters[base](st);
+        if (st) applyState(base, st);
+      } else if (kind === "live") {
+        try { var m = JSON.parse(text); if (m && m.from !== TAB_ID) bus.inject(m); } catch (e) {}
+      } else if (kind === "media" && parts[4] && text) {
+        applyMedia(base, parts.slice(4).join("/"), text);
+      } else if (kind === "stories" && text) {
+        try { applyStories(base, JSON.parse(text)); } catch (e) {}
+      }
+    }
+
+    function live(m) {
+      if (!client || !connected || !LIVE[m.type]) return;
+      var bases;
+      if (m.chatId) { var c = chatById(m.chatId); bases = c && c.topic ? [c.topic] : []; }
+      else bases = myBases();
+      var s = JSON.stringify(m);
+      bases.forEach(function (b) { client.publish(b + "/live", s, { qos: 0 }); });
+    }
+
+    // ---- lo que se manda: el chat como JSON (sin fotos/audios, que van aparte) ----
+    function slimMsg(m) {
+      var o = { id: m.id, user_id: m.user_id, name: m.name, color: m.color, created_at: m.created_at };
+      ["text", "sticker", "stickerImg", "dur", "vtype"].forEach(function (k) { if (m[k] !== undefined) o[k] = m[k]; });
+      var media = m.image ? "image" : m.audio ? "audio" : m.gif ? "gif" : (m.video && !m.vlocal) ? "video" : m.pending || null;
+      if (media) o.media = media;
+      if (m.vlocal) o.vlocal = true;
+      return o;
+    }
+    function buildState(chatId) {
+      var d = getDB(), c = chatById(chatId, d); if (!c) return null;
+      var memberIds = {}; d.chat_members.forEach(function (m) { if (m.chat_id === chatId) memberIds[m.user_id] = 1; });
+      return {
+        v: 1,
+        chat: { id: c.id, name: c.name, emoji: c.emoji, pass_hash: c.pass_hash, created_by: c.created_by, created_at: c.created_at, updated_at: c.updated_at || c.created_at },
+        members: d.profiles.filter(function (p) { return memberIds[p.id]; }).map(function (p) { return { id: p.id, name: p.name, color: p.color, photo: p.photo || null }; }),
+        messages: d.messages.filter(function (m) { return m.chat_id === chatId; }).slice(-MAX_MSGS).map(slimMsg),
+        strokes: d.strokes.filter(function (s) { return s.chat_id === chatId; }).slice(-MAX_STROKES),
+        dead: { m: Object.keys((c.dead && c.dead.m) || {}), s: Object.keys((c.dead && c.dead.s) || {}) },
+        clearedAt: c.clearedAt || 0
+      };
+    }
+    function publishNow(chatId) {
+      var c = chatById(chatId); if (!client || !c || !c.topic) return;
+      var st = buildState(chatId); if (!st) return;
+      client.publish(c.topic + "/state", JSON.stringify(st), { qos: 1, retain: true });
+    }
+    // Hasta recibir lo que ya hay en el servidor se espera un poco, para no pisarlo con una versión a medias
+    var received = {};
+    function changed(chatId) {
+      var c = chatById(chatId); if (!client || !c || !c.topic) return;
+      clearTimeout(timers[chatId]);
+      timers[chatId] = setTimeout(function () { publishNow(chatId); }, received[c.topic] ? 250 : 3000);
+    }
+    function publishAll() { var d = getDB(); getMine().forEach(function (m) { var c = chatById(m.chat, d); if (c && c.topic) changed(c.id); }); }
+
+    function pubMedia(base, id, text) { if (client) client.publish(base + "/media/" + id, text, { qos: 1, retain: true }); }
+    function sendMedia(chatId, row) {
+      var c = chatById(chatId); if (!client || !c || !c.topic) return;
+      if (row.image) pubMedia(c.topic, row.id, row.image);
+      else if (row.audio) pubMedia(c.topic, row.id, row.audio);
+      else if (row.gif) mediaGet(row.gif).then(function (g) { if (g) pubMedia(c.topic, row.id, JSON.stringify(g)); });
+      else if (row.video && !row.vlocal) mediaGet(row.video).then(function (blob) {
+        if (!blob) return;
+        var r = new FileReader(); r.onload = function () { pubMedia(c.topic, row.id, r.result); }; r.readAsDataURL(blob);
+      });
+    }
+    function dropMedia(chatId, id) { var c = chatById(chatId); if (client && c && c.topic) client.publish(c.topic + "/media/" + id, "", { qos: 1, retain: true }); }
+
+    // ---- lo que llega: juntar el JSON del servidor con lo que hay en este aparato ----
+    function fillMedia(row, kind, text) {
+      delete row.pending;
+      if (kind === "image") { row.image = text; return Promise.resolve(); }
+      if (kind === "audio") { row.audio = text; return Promise.resolve(); }
+      if (kind === "gif") {
+        var g; try { g = JSON.parse(text); } catch (e) { return Promise.resolve(); }
+        var gid = "g" + rid() + rid(); row.gif = gid;
+        return mediaPut(gid, g).then(function () { delete gifCache[gid]; }, function () {});
+      }
+      if (kind === "video") {
+        var vid = "v" + rid() + rid(); row.video = vid;
+        return mediaPut(vid, dataUrlToBlob(text)).then(function () { delete mediaURLs[vid]; }, function () {});
+      }
+      return Promise.resolve();
+    }
+    function applyMedia(base, id, text) {
+      var d = getDB(), c = chatOf(base, d);
+      var row = c && d.messages.filter(function (m) { return m.chat_id === c.id && String(m.id) === id; })[0];
+      if (!row || !row.pending) { if (!row) pendingMedia[base + "/" + id] = text; return; }
+      fillMedia(row, row.pending, text).then(function () {
+        var d2 = getDB(), r2 = d2.messages.filter(function (m) { return m.chat_id === c.id && String(m.id) === id; })[0];
+        if (!r2) return;
+        ["image", "audio", "gif", "video"].forEach(function (k) { if (row[k]) r2[k] = row[k]; });
+        delete r2.pending;
+        saveDB(d2);
+        if (currentChat === c.id) renderAllMessages(); else renderChatsHome();
+      });
+    }
+
+    function removeLocalChat(chatId, d) {
+      d.messages.forEach(function (m) { if (m.chat_id === chatId && m.video) mediaDel(m.video); });
+      d.chats = d.chats.filter(function (x) { return x.id !== chatId; });
+      ["chat_members", "messages", "strokes"].forEach(function (t) { d[t] = d[t].filter(function (r) { return r.chat_id !== chatId; }); });
+    }
+
+    function applyState(base, st) {
+      var d = getDB(), c = chatOf(base, d);
+      if (st.deleted || st.moved) {
+        if (!c) return;
+        var name = c.name;
+        removeLocalChat(c.id, d); saveDB(d);
+        var wasMine = !!identityFor(c.id);
+        forgetChat(c.id); sync();
+        if (wasMine && booted) {
+          afterMineChanged();
+          toast(st.moved ? "La contraseña o el nombre del chat «" + name + "» ha cambiado. Vuelve a entrar con los nuevos." : "El chat «" + name + "» se ha borrado");
+        }
+        return;
+      }
+      if (!st.chat) return;
+      if (!c) {
+        c = chatById(st.chat.id, d);
+        if (!c) { c = { id: st.chat.id, name: st.chat.name, emoji: st.chat.emoji, pass_hash: st.chat.pass_hash, created_by: st.chat.created_by, created_at: st.chat.created_at, updated_at: st.chat.updated_at }; d.chats.push(c); }
+        c.topic = base;
+      }
+      var needPublish = false;
+      if ((st.chat.updated_at || "") > (c.updated_at || c.created_at || "")) {
+        c.name = st.chat.name; c.emoji = st.chat.emoji; c.pass_hash = st.chat.pass_hash; c.updated_at = st.chat.updated_at;
+      } else if ((c.updated_at || "") > (st.chat.updated_at || "")) needPublish = true;
+      c.dead = c.dead || { m: {}, s: {} };
+      (st.dead && st.dead.m || []).forEach(function (id) { c.dead.m[id] = 1; });
+      (st.dead && st.dead.s || []).forEach(function (id) { c.dead.s[id] = 1; });
+      var remoteDeadM = {}, remoteDeadS = {};
+      (st.dead && st.dead.m || []).forEach(function (id) { remoteDeadM[id] = 1; });
+      (st.dead && st.dead.s || []).forEach(function (id) { remoteDeadS[id] = 1; });
+      if (Object.keys(c.dead.m).some(function (id) { return !remoteDeadM[id]; }) || Object.keys(c.dead.s).some(function (id) { return !remoteDeadS[id]; })) needPublish = true;
+      if ((st.clearedAt || 0) > (c.clearedAt || 0)) c.clearedAt = st.clearedAt;
+      else if ((c.clearedAt || 0) > (st.clearedAt || 0)) needPublish = true;
+
+      // Personas y miembros
+      var memberSet = {}, beforeMembers = {};
+      d.chat_members.forEach(function (m) { if (m.chat_id === c.id) { memberSet[m.user_id] = 1; beforeMembers[m.user_id] = 1; } });
+      (st.members || []).forEach(function (p) {
+        var lp = d.profiles.filter(function (x) { return x.id === p.id; })[0];
+        if (lp) { lp.name = p.name; lp.color = p.color; if (p.photo) lp.photo = p.photo; else delete lp.photo; }
+        else d.profiles.push({ id: p.id, name: p.name, color: p.color, photo: p.photo || undefined });
+        if (!memberSet[p.id]) { memberSet[p.id] = 1; d.chat_members.push({ chat_id: c.id, user_id: p.id, joined_at: new Date().toISOString() }); }
+      });
+      var remoteMembers = {}; (st.members || []).forEach(function (p) { remoteMembers[p.id] = 1; });
+      if (Object.keys(memberSet).some(function (id) { return !remoteMembers[id]; })) needPublish = true;
+      // Ha entrado alguien nuevo: se le vuelven a mandar las stories para que vea también las de antes
+      var newcomer = (st.members || []).some(function (p) { return !beforeMembers[p.id]; });
+      if (newcomer && identityFor(c.id) && received[base]) {
+        clearTimeout(storyFix[base]);
+        storyFix[base] = setTimeout(function () { publishStories(base); }, 800 + Math.random() * 1500);
+      }
+
+      // Mensajes
+      var have = {}, newFromOthers = 0, lastName = "";
+      d.messages.forEach(function (m) { if (m.chat_id === c.id) have[String(m.id)] = m; });
+      var remoteIds = {};
+      (st.messages || []).forEach(function (rm) {
+        var id = String(rm.id); remoteIds[id] = 1;
+        if (c.dead.m[id]) return;
+        if (have[id]) { have[id].name = rm.name; have[id].color = rm.color; return; }
+        var row = {}; for (var k in rm) if (k !== "media") row[k] = rm[k];
+        row.chat_id = c.id;
+        if (rm.media) {
+          row.pending = rm.media;
+          var pm = pendingMedia[base + "/" + id];
+          if (pm) {
+            delete pendingMedia[base + "/" + id];
+            fillMedia(row, rm.media, pm).then(function () { if (booted && currentChat === c.id) renderAllMessages(); });
+          }
+        }
+        d.messages.push(row); have[id] = row;
+        var mine = identityFor(c.id);
+        if (!mine || rm.user_id !== mine.id) { newFromOthers++; lastName = rm.name; }
+      });
+      d.messages = d.messages.filter(function (m) { return m.chat_id !== c.id || !c.dead.m[String(m.id)]; });
+      var localWindow = d.messages.filter(function (m) { return m.chat_id === c.id; }).slice(-MAX_MSGS);
+      if (localWindow.some(function (m) { return !remoteIds[String(m.id)]; })) needPublish = true;
+      d.messages.sort(function (a, b) { return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0; });
+
+      // Dibujos
+      var haveS = {}; d.strokes.forEach(function (s) { if (s.chat_id === c.id) haveS[s.id] = 1; });
+      var remoteS = {};
+      (st.strokes || []).forEach(function (s) {
+        remoteS[s.id] = 1;
+        if (!haveS[s.id] && !c.dead.s[s.id]) { var copy = JSON.parse(JSON.stringify(s)); copy.chat_id = c.id; d.strokes.push(copy); haveS[s.id] = 1; }
+      });
+      d.strokes = d.strokes.filter(function (s) { return s.chat_id !== c.id || (!c.dead.s[s.id] && (s.t || 0) >= (c.clearedAt || 0)); });
+      if (d.strokes.filter(function (s) { return s.chat_id === c.id; }).slice(-MAX_STROKES).some(function (s) { return !remoteS[s.id]; })) needPublish = true;
+
+      saveDB(d);
+      if (needPublish) changed(c.id);
+      if (!booted || !identityFor(c.id)) return;
+      if (currentChat === c.id) {
+        renderAllMessages(); reloadStrokes(); redrawAll();
+        $("groupNameLabel").textContent = chatTitle();
+        if (activeTab() === "chatTab") markSeen();
+      } else renderChatsHome();
+      if (newFromOthers) {
+        if (currentChat && currentChat !== c.id) toast("💬 " + lastName + " en " + c.name);
+        flagTab("chatTab");
+      }
+    }
+
+    // ---- stories: cada uno aporta las suyas; se juntan en cada chat ----
+    // Stories que este aparato conoce de la gente de ese chat (las suyas y las de los demás miembros)
+    function storiesForBase(base, d) {
+      var c = chatOf(base, d), members = {}, mineIds = myIds();
+      if (c) d.chat_members.forEach(function (m) { if (m.chat_id === c.id) members[m.user_id] = 1; });
+      return liveStories(d).filter(function (s) { return members[s.user_id] || mineIds[s.user_id]; });
+    }
+    function publishStories(base) {
+      if (!client) return;
+      var d = getDB(), cache = storyCache[base] || { stories: [], dead: [] };
+      var dead = {}; (cache.dead || []).concat(Object.keys(d.deadStories || {})).forEach(function (id) { dead[id] = 1; });
+      var byId = {};
+      // Se juntan las del servidor con TODAS las que conoce este aparato, para no dejar fuera las de nadie
+      (cache.stories || []).concat(storiesForBase(base, d)).forEach(function (s) { if (!dead[s.id]) byId[s.id] = s; });
+      var limit = Date.now() - STORY_HOURS * 3600 * 1000;
+      var list = Object.keys(byId).map(function (k) { return byId[k]; }).filter(function (s) { return new Date(s.created_at).getTime() > limit; });
+      var obj = { stories: list, dead: Object.keys(dead).slice(-300) };
+      storyCache[base] = obj;
+      client.publish(base + "/stories", JSON.stringify(obj), { qos: 1, retain: true });
+    }
+    function pushStories() {
+      myBases().forEach(function (b) {
+        if (storyCache[b]) publishStories(b);
+        else setTimeout(function () { publishStories(b); }, 3000);   // primero que lleguen las de los demás
+      });
+    }
+    function applyStories(base, obj) {
+      storyCache[base] = obj;
+      var d = getDB(), have = {}, changedAny = false, newFromOthers = "";
+      d.deadStories = d.deadStories || {};
+      (obj.dead || []).forEach(function (id) { d.deadStories[id] = 1; });
+      d.stories = d.stories.filter(function (s) { if (d.deadStories[s.id]) { changedAny = true; return false; } return true; });
+      d.stories.forEach(function (s) { have[s.id] = 1; });
+      var limit = Date.now() - STORY_HOURS * 3600 * 1000, mineIds = myIds();
+      (obj.stories || []).forEach(function (s) {
+        if (have[s.id] || d.deadStories[s.id] || new Date(s.created_at).getTime() <= limit) return;
+        d.stories.push(s); have[s.id] = 1; changedAny = true;
+        if (!mineIds[s.user_id]) newFromOthers = s.name;
+      });
+      if (changedAny) saveDB(d);
+      // Si al servidor le falta alguna story que este aparato sí tiene (de quien sea), se vuelve a subir
+      var remote = {}; (obj.stories || []).forEach(function (s) { remote[s.id] = 1; });
+      if (storiesForBase(base, d).some(function (s) { return !remote[s.id] && !d.deadStories[s.id]; })) {
+        clearTimeout(storyFix[base]);
+        storyFix[base] = setTimeout(function () { publishStories(base); }, 500 + Math.random() * 1500);
+      }
+      if (changedAny && booted) { renderStories(); if (newFromOthers) flagTab("storyTab"); }
+    }
+
+    return {
+      connect: connect, sync: sync, find: find, topicFor: topicFor, live: live,
+      changed: changed, publishAll: publishAll, sendMedia: sendMedia, dropMedia: dropMedia,
+      pushStories: pushStories, publishStories: publishStories,
+      isOnline: function () { return !!(client && connected); },
+      deleteRemote: function (base, moved) { if (client && base) client.publish(base + "/state", JSON.stringify(moved ? { moved: true } : { deleted: true }), { qos: 1, retain: true }); },
+      maxMedia: MAX_MEDIA, status: status
+    };
+  })();
+
+  var me = null, currentChat = null, booted = false;
+
+  function showScreen(id) {
+    ["welcomeScreen", "mainApp"].forEach(function (s) { $(s).style.display = s === id ? "flex" : "none"; });
+  }
+
+  // ===== ACTUALIZARSE SOLA (sin Ctrl + F5) =====
+  // Mira la página publicada sin usar la copia guardada del navegador y compara el número de versión
+  var updateShown = false;
+  function busyNow() {
+    return !!call || !!rec || ($("msgInput") && $("msgInput").value.trim()) ||
+      document.querySelector(".modal-backdrop.open, .confirm-backdrop.open, .story-viewer.open");
+  }
+  function goToVersion(v) { location.replace(location.pathname + "?v=" + encodeURIComponent(v)); }
+  function checkUpdate() {
+    if (!/^https?:$/.test(location.protocol) || /claude\.ai|claudeusercontent/.test(location.hostname)) return;
+    fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (html) {
+      var m = html.match(/var APP_VERSION = "([^"]+)"/);
+      if (!m || m[1] === APP_VERSION) return;
+      // Si ya intentamos ir a esa versión y GitHub aún da la vieja, no se recarga en bucle: se espera
+      var tried = null; try { tried = sessionStorage.getItem("cf_upd_tried"); } catch (e) {}
+      if (tried === m[1]) return;
+      if (!busyNow()) { try { sessionStorage.setItem("cf_upd_tried", m[1]); } catch (e) {} goToVersion(m[1]); return; }
+      if (updateShown || document.querySelector(".confirm-backdrop.open")) return;
+      updateShown = true;
+      askConfirm("Hay una versión nueva de la app. ¿Actualizar ahora?", "Actualizar", function () {
+        try { sessionStorage.setItem("cf_upd_tried", m[1]); } catch (e) {}
+        goToVersion(m[1]);
+      }, function () { updateShown = false; }, true);
+    }).catch(function () {});
+  }
+  setInterval(checkUpdate, 60000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) checkUpdate(); });
+  setTimeout(checkUpdate, 3000);
+
+  function start() {
+    initChatModal(); initSettings(); initStories();
+    cloud.connect(); cloud.sync();
+    $("welcomeCreateBtn").onclick = function () { openChatModal("create"); };
+    $("welcomeJoinBtn").onclick = function () { openChatModal("join"); };
+    $("welcomeImportBtn").onclick = function () { $("importFile").click(); };
+    // Si el navegador no deja guardar nada, avisarlo claro en vez de fallar en silencio
+    var canStore = saveJSON("cf_test", 1); try { localStorage.removeItem("cf_test"); } catch (e) {}
+    if (!canStore) {
+      $("welcomeNote").textContent = "⚠️ Este navegador no deja guardar datos en esta página, así que la app no puede funcionar. Revisa que no estés en modo privado y que no tengas bloqueados los datos de los sitios.";
+      $("welcomeNote").style.color = "#C0392B";
+    }
+    if (getMine().length) boot(); else showScreen("welcomeScreen");
+  }
+
+  function boot() {
+    showScreen("mainApp");
+    if (!booted) {
+      booted = true;
+      initChat(); initChatsHome(); initDraw(); initCalls(); initNav();
+      bus.send({ type: "hello" });
+    }
+    closeChat();
+    renderCallLog();
+    renderStories();
+    announce();
+  }
+
+  function updateMeLabel() {
+    var who = me || lastMe(), box = $("meLabel");
+    box.innerHTML = "";
+    if (!who) return;
+    var dot = document.createElement("span"); dot.className = "avatar-dot";
+    paintAvatar(dot, who.id, who.name, who.color);
+    box.appendChild(dot); box.appendChild(document.createTextNode(who.name));
+  }
+
+  function activeTab() { var b = document.querySelector(".nav-btn.active"); return b ? b.getAttribute("data-tab") : "chatTab"; }
+  function initNav() {
+    var btns = document.querySelectorAll(".nav-btn");
+    btns.forEach(function (b) {
+      b.onclick = function () {
+        btns.forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active"); b.classList.remove("has-new");
+        document.querySelectorAll(".tab-content").forEach(function (t) { t.classList.remove("active"); });
+        var tab = b.getAttribute("data-tab");
+        $(tab).classList.add("active");
+        var inChat = tab === "chatTab" && currentChat;
+        $("backBtn").style.display = inChat ? "" : "none";
+        $("chatMenuBtn").style.display = inChat ? "" : "none";
+        $("groupNameLabel").textContent = tab === "callsTab" ? "Llamadas" : tab === "storyTab" ? "Story" : chatTitle();
+        if (inChat) { requestAnimationFrame(resizeCanvas); var l = $("chatList"); l.scrollTop = l.scrollHeight; markSeen(); }
+        else if (tab === "chatTab") renderChatsHome();
+        else if (tab === "storyTab") renderStories();
+      };
+    });
+  }
+  function goTab(tab) { var b = document.querySelector('.nav-btn[data-tab="' + tab + '"]'); if (b && !b.classList.contains("active")) b.click(); }
+  function flagTab(tab) { if (activeTab() !== tab) document.querySelector('.nav-btn[data-tab="' + tab + '"]').classList.add("has-new"); }
+
+  // ===== LISTA DE CHATS =====
+  function chatById(id, d) { return (d || getDB()).chats.filter(function (c) { return c.id === id; })[0] || null; }
+  function myChats(d) { var ids = {}; getMine().forEach(function (m) { ids[m.chat] = true; }); return (d || getDB()).chats.filter(function (c) { return ids[c.id]; }); }
+  function chatTitle() { var c = currentChat && chatById(currentChat); return c ? c.emoji + " " + c.name : "Chats"; }
+  function isOwner(c) { var u = identityFor(c.id); return !!u && c.created_by === u.id; }
+  function markSeen() {
+    if (!currentChat) return;
+    var seen = loadJSON("cf_seen", {}); seen[currentChat] = new Date().toISOString(); saveJSON("cf_seen", seen);
+  }
+  function lastMessage(d, chatId) {
+    for (var i = d.messages.length - 1; i >= 0; i--) if (d.messages[i].chat_id === chatId) return d.messages[i];
+    return null;
+  }
+
+  function renderChatsHome() {
+    var box = $("chatsList"), d = getDB(), chats = myChats(d);
+    if (!chats.length) { box.innerHTML = '<div class="empty-state" style="margin-top:40px"><span class="big">💬</span>Aún no tienes chats.<br>Crea uno nuevo, o entra en uno que ya exista<br>con su nombre y contraseña.</div>'; return; }
+    var seen = loadJSON("cf_seen", {});
+    var rows = chats.map(function (c) { return { c: c, last: lastMessage(d, c.id), me: identityFor(c.id) }; });
+    rows.sort(function (a, b) { return new Date(b.last ? b.last.created_at : b.c.created_at) - new Date(a.last ? a.last.created_at : a.c.created_at); });
+    box.innerHTML = "";
+    rows.forEach(function (r) {
+      var c = r.c, last = r.last, mine = r.me, row = document.createElement("div");
+      row.className = "chat-row"; row.setAttribute("role", "button"); row.tabIndex = 0;
+      var fromMe = last && mine && last.user_id === mine.id;
+      var preview = last ? ((fromMe ? "Tú" : last.name) + ": " + (last.sticker || last.text || (last.audio || last.pending === "audio" ? "🎤 Audio" : last.image || last.pending === "image" ? "📷 Foto" : last.video || last.vlocal || last.pending === "video" ? "🎬 Vídeo" : last.stickerImg ? "🎨 Sticker" : last.gif || last.pending === "gif" ? "🎞️ GIF" : ""))) : "Chat nuevo, ¡escribe algo!";
+      var unread = last && !fromMe && (!seen[c.id] || new Date(seen[c.id]) < new Date(last.created_at));
+      row.innerHTML = '<div class="chat-icon"></div><div class="chat-info"><div class="cname"></div><div class="last"></div></div>' +
+        (unread ? '<span class="unread-dot"></span>' : "") + '<span class="chat-when">' + (last ? fmtWhen(last.created_at) : "") + "</span>" +
+        '<button class="row-del" title="' + (isOwner(c) ? "Borrar chat" : "Salir del chat") + '">🗑️</button>';
+      row.querySelector(".chat-icon").textContent = c.emoji || "💬";
+      row.querySelector(".cname").textContent = c.name;
+      row.querySelector(".last").textContent = preview;
+      row.onclick = function () { openChat(c.id); };
+      row.onkeydown = function (e) { if (e.key === "Enter") openChat(c.id); };
+      row.querySelector(".row-del").onclick = function (e) { e.stopPropagation(); removeChat(c); };
+      box.appendChild(row);
+    });
+  }
+
+  function openChat(id) {
+    var d = getDB();
+    if (!chatById(id, d) || !identityFor(id)) return;
+    goTab("chatTab");
+    currentChat = id; me = identityFor(id);
+    saveJSON("cf_last", me);
+    updateMeLabel(); announce();
+    setDrawMode(false);
+    $("chatsHome").style.display = "none"; $("chatView").style.display = "flex";
+    $("backBtn").style.display = ""; $("chatMenuBtn").style.display = "";
+    $("groupNameLabel").textContent = chatTitle();
+    strokes = d.strokes.filter(function (s) { return s.chat_id === id; }); remoteStrokes = {};
+    renderAllMessages(); markSeen();
+    requestAnimationFrame(resizeCanvas);
+  }
+
+  function closeChat() {
+    stopRecording(true); stopMsgAudio();
+    currentChat = null; me = null;
+    if (canvas) setDrawMode(false);
+    $("chatView").style.display = "none"; $("chatsHome").style.display = "block";
+    $("backBtn").style.display = "none"; $("chatMenuBtn").style.display = "none";
+    if (activeTab() === "chatTab") $("groupNameLabel").textContent = "Chats";
+    updateMeLabel();
+    renderChatsHome();
+  }
+
+  function forgetChat(chatId) { saveMine(getMine().filter(function (m) { return m.chat !== chatId; })); }
+
+  function afterMineChanged() {
+    if (!getMine().length) { closeChat(); showScreen("welcomeScreen"); }
+    else if (currentChat && !identityFor(currentChat)) closeChat();
+    else renderChatsHome();
+  }
+
+  // Quien creó el chat lo borra para todos; los demás solo salen de él
+  function removeChat(c) {
+    var owner = isOwner(c), u = identityFor(c.id);
+    var question = owner
+      ? "¿Borrar el chat «" + c.name + "» para todos? Se perderán sus mensajes y dibujos."
+      : "¿Salir del chat «" + c.name + "»? Podrás volver a entrar con su nombre y contraseña.";
+    askConfirm(question, owner ? "Borrar chat" : "Salir", function () {
+      var d = getDB();
+      if (owner && c.topic) cloud.deleteRemote(c.topic, false);
+      if (owner) {
+        d.chats = d.chats.filter(function (x) { return x.id !== c.id; });
+        d.messages.forEach(function (m) { if (m.chat_id === c.id && m.video) mediaDel(m.video); });
+        ["chat_members", "messages", "strokes"].forEach(function (t) { d[t] = d[t].filter(function (r) { return r.chat_id !== c.id; }); });
+      } else if (u) {
+        d.chat_members = d.chat_members.filter(function (m) { return !(m.chat_id === c.id && m.user_id === u.id); });
+      }
+      saveDB(d);
+      forgetChat(c.id);
+      cloud.sync();
+      closeChatModal();
+      afterMineChanged();
+      toast(owner ? "Chat borrado" : "Has salido del chat");
+      bus.send({ type: "chats", deleted: owner ? c.id : null });
+    });
+  }
+
+  // ===== CREAR / ENTRAR / EDITAR CHAT =====
+  var chatMode = "create", editingChat = null, pickedEmoji = CHAT_EMOJIS[0], pickedColor = USER_COLORS[0];
+  function buildPicker(rowId, items, current, cls, onPick, isColor) {
+    var row = $(rowId); row.innerHTML = "";
+    items.forEach(function (it) {
+      var el = document.createElement("div"); el.className = cls + (it === current ? " selected" : "");
+      if (isColor) { el.style.background = it; if (it === "#FFFFFF") el.style.boxShadow = "inset 0 0 0 1.5px #ccc"; }
+      else el.textContent = it;
+      el.onclick = function () { onPick(it); row.querySelectorAll("." + cls).forEach(function (x) { x.classList.remove("selected"); }); el.classList.add("selected"); };
+      row.appendChild(el);
+    });
+  }
+  function openChatModal(mode, chat) {
+    chatMode = mode; editingChat = chat || null;
+    var last = lastMe();
+    pickedEmoji = chat && chat.emoji ? chat.emoji : CHAT_EMOJIS[0];
+    pickedColor = last ? last.color : USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)];
+    var texts = {
+      create: ["Crear chat", (last ? "Pon un nombre al chat y una contraseña." : "Pon un nombre al chat, tu nombre y una contraseña.") + " Luego dile el nombre del chat y la contraseña a quien quieras que entre.", "Contraseña del chat", "Crear chat"],
+      join: ["Entrar en un chat", (last ? "Escribe el nombre del chat y la contraseña" : "Escribe el nombre del chat, tu nombre y la contraseña") + " que te ha dado quien lo creó.", "Contraseña del chat", "Entrar"],
+      edit: ["Editar chat", "Para invitar a alguien, dile el nombre del chat y la contraseña.", "Nueva contraseña (déjalo vacío para no cambiarla)", "Guardar"]
+    }[mode];
+    $("chatModalTitle").textContent = texts[0];
+    $("chatModalLead").textContent = texts[1];
+    $("chatPassLabel").textContent = texts[2];
+    $("chatSaveBtn").textContent = texts[3];
+    $("chatSaveBtn").disabled = false;
+    // Tu nombre solo se pide la primera vez; luego solo se cambia desde Ajustes
+    var askName = mode !== "edit" && !last;
+    $("userNameField").style.display = askName ? "block" : "none";
+    $("userColorField").style.display = askName ? "block" : "none";
+    $("chatEmojiField").style.display = mode === "join" ? "none" : "block";
+    $("chatDeleteBtn").style.display = mode === "edit" ? "" : "none";
+    if (chat) $("chatDeleteBtn").textContent = isOwner(chat) ? "🗑️ Borrar este chat" : "🚪 Salir de este chat";
+    $("chatNameInput").value = chat ? chat.name : "";
+    $("userNameInput").value = last ? last.name : "";
+    $("chatPassInput").value = "";
+    $("chatError").textContent = "";
+    buildPicker("chatEmojiRow", CHAT_EMOJIS, pickedEmoji, "emoji-pick", function (v) { pickedEmoji = v; });
+    buildPicker("colorSwatchRow", USER_COLORS, pickedColor, "swatch", function (v) { pickedColor = v; }, true);
+    $("chatModal").classList.add("open");
+    setTimeout(function () { $("chatNameInput").focus(); }, 50);
+  }
+  function closeChatModal() { $("chatModal").classList.remove("open"); }
+
+  function enterChat(chatId, user) {
+    var mine = getMine().filter(function (m) { return m.chat !== chatId; });
+    mine.push({ chat: chatId, user: user });
+    saveMine(mine); saveJSON("cf_last", user);
+    closeChatModal();
+    if ($("mainApp").style.display === "none") boot();
+    openChat(chatId);
+    bus.send({ type: "chats" });
+    cloud.sync();
+    cloud.changed(chatId);
+  }
+
+  function saveChatModal() {
+    var last = lastMe();
+    var name = $("chatNameInput").value.trim(), pass = $("chatPassInput").value;
+    var userName = last ? last.name : $("userNameInput").value.trim();
+    if (last) pickedColor = last.color;
+    var err = $("chatError"), btn = $("chatSaveBtn"); err.textContent = "";
+    if (!name) { err.textContent = "Escribe el nombre del chat."; $("chatNameInput").focus(); return; }
+    if (chatMode !== "edit" && !userName) { err.textContent = "Escribe tu nombre."; $("userNameInput").focus(); return; }
+    if ((chatMode !== "edit" || pass) && pass.length < 3) { err.textContent = "La contraseña tiene que tener al menos 3 letras o números."; $("chatPassInput").focus(); return; }
+    var btnText = btn.textContent;
+    function busy(on, text) { btn.disabled = on; btn.textContent = on ? (text || "Un momento…") : btnText; }
+
+    // Entra en un chat que ya existe (aquí o recién traído del servidor)
+    function joinLocal(c, topic) {
+      var d = getDB(), cc = chatById(c.id, d), user = findOrCreateProfile(d, userName, pickedColor);
+      if (topic && !cc.topic) cc.topic = topic;
+      if (!d.chat_members.some(function (m) { return m.chat_id === cc.id && m.user_id === user.id; })) d.chat_members.push({ chat_id: cc.id, user_id: user.id, joined_at: new Date().toISOString() });
+      if (!saveDB(d)) return;
+      busy(false);
+      enterChat(cc.id, user);
+      toast("Has entrado en " + cc.name);
+    }
+    function createNow(h, topic) {
+      var d = getDB(), now = new Date().toISOString(), id = "c" + Date.now().toString(36) + rid();
+      var user = findOrCreateProfile(d, userName, pickedColor);
+      d.chats.push({ id: id, name: name, emoji: pickedEmoji, pass_hash: h, created_by: user.id, created_at: now, updated_at: now, topic: topic });
+      d.chat_members.push({ chat_id: id, user_id: user.id, joined_at: now });
+      busy(false);
+      if (!saveDB(d)) { err.textContent = "Este navegador no deja guardar datos en esta página. Revisa que no estés en modo privado y que no tengas bloqueados los datos de los sitios."; return; }
+      enterChat(id, user);
+      if (!cloud.isOnline()) toast("Sin conexión al servidor: el chat se compartirá cuando vuelva la conexión");
+    }
+
+    if (chatMode === "edit") { saveEdit(); return; }
+
+    busy(true, "Buscando el chat…");
+    Promise.all([hashPass(pass), cloud.topicFor(name, pass)]).then(function (r) {
+      var h = r[0], topic = r[1];
+      // 1) ¿Ya está en este aparato con esa contraseña?
+      var local = getDB().chats.filter(function (c) { return c.name.toLowerCase() === name.toLowerCase() && c.pass_hash === h; })[0];
+      if (local) { joinLocal(local, topic); return; }
+      // 2) ¿Está en el servidor? (lo creó otra persona en otro aparato)
+      cloud.find(topic).then(function (st) {
+        if (st && st.chat && !st.deleted && !st.moved) {
+          if (st.chat.pass_hash !== h) { busy(false); err.textContent = "La contraseña no es correcta."; return; }
+          // applyState ya lo ha guardado en este aparato al llegar
+          var c = chatById(st.chat.id);
+          if (!c) { busy(false); err.textContent = "No se pudo traer el chat. Inténtalo otra vez."; return; }
+          joinLocal(c, topic);
+          return;
+        }
+        if (st === undefined && chatMode === "join") {
+          busy(false);
+          err.textContent = "No hay conexión con el servidor. Revisa tu internet e inténtalo otra vez.";
+          return;
+        }
+        // 3) No existe en ningún sitio
+        if (chatMode === "create") { createNow(h, topic); return; }
+        busy(false);
+        askConfirm("No hay ningún chat llamado «" + name + "» con esa contraseña. ¿Quieres crearlo ahora?", "Crear chat", function () { createNow(h, topic); }, null, true);
+      });
+    });
+
+    function saveEdit() {
+      var c = editingChat, renamed = name !== c.name;
+      if (renamed && c.topic && !pass) {
+        err.textContent = "Para cambiar el nombre, escribe también la contraseña del chat (puede ser la misma de siempre).";
+        $("chatPassInput").focus(); return;
+      }
+      busy(true);
+      (pass ? Promise.all([hashPass(pass), cloud.topicFor(name, pass)]) : Promise.resolve([null, null])).then(function (r) {
+        var h = r[0], topic = r[1], d = getDB(), cc = chatById(c.id, d);
+        if (!cc) { busy(false); return; }
+        var oldTopic = cc.topic;
+        cc.name = name; cc.emoji = pickedEmoji; cc.updated_at = new Date().toISOString();
+        if (h) cc.pass_hash = h;
+        if (topic) cc.topic = topic;
+        if (!saveDB(d)) { busy(false); return; }
+        // Nombre + contraseña marcan la "dirección" del chat: si cambian, el chat se muda
+        if (oldTopic && topic && oldTopic !== topic) cloud.deleteRemote(oldTopic, true);
+        cloud.sync(); cloud.changed(c.id);
+        busy(false);
+        closeChatModal();
+        $("groupNameLabel").textContent = chatTitle();
+        if (oldTopic && topic && oldTopic !== topic) toast("Guardado. Avisa a los demás del nuevo nombre o contraseña para que vuelvan a entrar.");
+        else if (h) toast("Contraseña cambiada");
+        bus.send({ type: "chats" });
+      });
+    }
+  }
+
+  function initChatModal() {
+    $("chatCancelBtn").onclick = closeChatModal;
+    $("chatModal").onclick = function (e) { if (e.target === $("chatModal")) closeChatModal(); };
+    $("chatNameInput").addEventListener("keydown", function (e) { if (e.key === "Enter") (chatMode === "edit" ? $("chatPassInput") : $("userNameInput")).focus(); });
+    $("userNameInput").addEventListener("keydown", function (e) { if (e.key === "Enter") $("chatPassInput").focus(); });
+    $("chatPassInput").addEventListener("keydown", function (e) { if (e.key === "Enter") saveChatModal(); });
+    $("chatSaveBtn").onclick = saveChatModal;
+    $("chatDeleteBtn").onclick = function () { if (editingChat) removeChat(editingChat); };
+  }
+
+  function initChatsHome() {
+    $("newChatBtn").onclick = function () { openChatModal("create"); };
+    $("joinChatBtn").onclick = function () { openChatModal("join"); };
+    $("chatMenuBtn").onclick = function () { var c = chatById(currentChat); if (c) openChatModal("edit", c); };
+    $("backBtn").onclick = closeChat;
+  }
+
+  // ===== MENSAJES =====
+  function renderAllMessages() {
+    if (!currentChat) return;
+    var list = $("chatList");
+    stopMsgAudio();
+    var db = getDB(), msgs = db.messages.filter(function (m) { return m.chat_id === currentChat; });
+    if (!msgs.length) { list.innerHTML = '<div class="empty-state"><span class="big">💬</span>Aún no hay mensajes.<br>¡Escribe el primero!<br><br>Toca 🖌️ para pintar en el fondo.</div>'; return; }
+    list.innerHTML = "";
+    msgs.forEach(function (row) {
+      var isMe = me && row.user_id === me.id;
+      var wrap = document.createElement("div");
+      wrap.className = "bubble-row" + (isMe ? " me" : "");
+      var dot = document.createElement("div");
+      dot.className = "avatar-dot"; paintAvatar(dot, row.user_id, row.name, row.color, db);
+      var bubble = document.createElement("div");
+      if (row.sticker) {
+        bubble.className = "bubble sticker-bubble"; bubble.textContent = row.sticker;
+      } else if (row.stickerImg) {
+        bubble.className = "bubble sticker-bubble";
+        var si = document.createElement("img"); si.alt = "Sticker";
+        si.onload = function () { list.scrollTop = list.scrollHeight; };
+        si.src = row.stickerImg; bubble.appendChild(si);
+      } else if (row.gif) {
+        bubble.className = "bubble sticker-bubble";
+        bubble.appendChild(makeGifCanvas(row.gif, 200));
+      } else {
+        bubble.className = "bubble";
+        var senderEl = !isMe ? '<div class="sender" style="color:' + escapeHtml(row.color || "#999") + '">' + escapeHtml(row.name) + "</div>" : "";
+        if (row.pending && !row.image && !row.audio && !row.gif && !row.video) {
+          var what = { image: "📷 Recibiendo foto…", audio: "🎤 Recibiendo audio…", gif: "🎞️ Recibiendo GIF…", video: "🎬 Recibiendo vídeo…" }[row.pending] || "⏳ Recibiendo…";
+          bubble.innerHTML = senderEl + '<div class="text"></div><div class="time">' + fmtTime(row.created_at) + "</div>";
+          bubble.querySelector(".text").textContent = what;
+        } else if (row.vlocal && !row.video) {
+          bubble.innerHTML = senderEl + '<div class="text"></div><div class="time">' + fmtTime(row.created_at) + "</div>";
+          bubble.querySelector(".text").textContent = "🎬 Vídeo (era muy grande: solo se ve en el aparato de quien lo mandó)";
+        } else if (row.image) {
+          bubble.className = "bubble photo-bubble";
+          bubble.innerHTML = senderEl + '<img class="msg-img" alt="Foto"><div class="time">' + fmtTime(row.created_at) + "</div>";
+          var pic = bubble.querySelector(".msg-img");
+          pic.onload = function () { list.scrollTop = list.scrollHeight; };
+          pic.src = row.image;
+        } else if (row.video) {
+          bubble.className = "bubble photo-bubble";
+          bubble.innerHTML = senderEl + '<div class="video-wrap"><video class="msg-img" muted playsinline preload="metadata"></video></div><div class="time">' + fmtTime(row.created_at) + "</div>";
+          var vid = bubble.querySelector("video");
+          vid.onloadeddata = function () { list.scrollTop = list.scrollHeight; };
+          mediaURL(row.video).then(function (url) {
+            if (url) vid.src = url + "#t=0.1";
+            else bubble.querySelector(".video-wrap").outerHTML = '<div class="video-missing">🎬 Este vídeo no está en este aparato</div>';
+          });
+        } else if (row.audio) {
+          bubble.innerHTML = senderEl + '<div class="audio-msg"><button class="audio-play" aria-label="Escuchar audio">▶</button><div class="audio-track"><i></i></div><span class="audio-time">' + fmtDur(row.dur || 0) + '</span></div><div class="time">' + fmtTime(row.created_at) + "</div>";
+          wireAudio(bubble, row);
+        } else {
+          bubble.innerHTML = senderEl + '<div class="text"></div><div class="time">' + fmtTime(row.created_at) + "</div>";
+          bubble.querySelector(".text").textContent = row.text;
+        }
+      }
+      if (row.image || row.video) { bubble.title = "Toca para verlo en grande"; bubble.onclick = function () { openImage(row, isMe); }; }
+      else if (isMe) { bubble.title = "Toca para borrar"; bubble.onclick = function () { deleteMessage(row.id); }; }
+      else if (row.sticker || row.stickerImg || row.gif) {
+        bubble.title = "Toca para guardarlo en favoritos";
+        bubble.onclick = function () {
+          var ready = row.gif
+            ? loadGif(row.gif).then(function (g) { return g ? { gif: row.gif, img: g.frames[0], id: "m" + row.id } : null; })
+            : Promise.resolve(row.sticker ? { e: row.sticker } : { img: row.stickerImg, id: "m" + row.id });
+          ready.then(function (item) {
+            if (!item) return;
+            if (isFav(item)) { toast("Ya está en tus favoritos ⭐"); return; }
+            askConfirm(row.gif ? "¿Guardar este GIF en tus favoritos?" : "¿Guardar este sticker en tus favoritos?", "⭐ Guardar", function () { toggleFav(item); toast("Guardado en favoritos ⭐"); }, null, true);
+          });
+        };
+      }
+      wrap.appendChild(dot); wrap.appendChild(bubble);
+      list.appendChild(wrap);
+    });
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function addMessage(fields) {
+    if (!currentChat || !me) return;
+    var d = getDB();
+    // Identificador único entre todos los aparatos
+    var row = { id: "m" + Date.now().toString(36) + rid(), chat_id: currentChat, user_id: me.id, name: me.name, color: me.color, created_at: new Date().toISOString() };
+    for (var k in fields) row[k] = fields[k];
+    d.messages.push(row);
+    var inChat = d.messages.filter(function (m) { return m.chat_id === currentChat; });
+    if (inChat.length > 500) { var drop = inChat[0].id; d.messages = d.messages.filter(function (m) { return m.id !== drop; }); }
+    if (!saveDB(d)) return;
+    renderAllMessages();
+    bus.send({ type: "msg", chatId: currentChat, name: me.name });
+    cloud.sendMedia(currentChat, row);
+    cloud.changed(currentChat);
+  }
+
+  // Borra un mensaje aquí y lo apunta como borrado para que desaparezca en todos los aparatos
+  function killMessage(chatId, id) {
+    var d = getDB(), c = chatById(chatId, d);
+    var row = d.messages.filter(function (m) { return m.id === id; })[0];
+    if (row && row.video) mediaDel(row.video);
+    d.messages = d.messages.filter(function (m) { return m.id !== id; });
+    if (c) { c.dead = c.dead || { m: {}, s: {} }; c.dead.m[String(id)] = 1; }
+    saveDB(d);
+    renderAllMessages();
+    bus.send({ type: "msgdel", chatId: chatId });
+    cloud.dropMedia(chatId, id);
+    cloud.changed(chatId);
+  }
+
+  function deleteMessage(id) {
+    askConfirm("¿Borrar este mensaje? Se borra para todos.", "Borrar", function () { killMessage(currentChat, id); });
+  }
+
+  // ===== VÍDEOS: van en IndexedDB, que tiene mucho más sitio que localStorage =====
+  var idbPromise = null, mediaURLs = {};
+  function idb() {
+    if (idbPromise) return idbPromise;
+    idbPromise = new Promise(function (res, rej) {
+      if (!window.indexedDB) { rej(new Error("sin indexedDB")); return; }
+      var r = indexedDB.open("chat-familiar-media", 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore("media"); };
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error); };
+    });
+    return idbPromise;
+  }
+  function mediaTx(mode, fn) {
+    return idb().then(function (db) {
+      return new Promise(function (res, rej) {
+        var tx = db.transaction("media", mode), req = fn(tx.objectStore("media"));
+        tx.oncomplete = function () { res(req && req.result); };
+        tx.onerror = tx.onabort = function () { rej(tx.error); };
+      });
+    });
+  }
+  function mediaPut(id, blob) { return mediaTx("readwrite", function (s) { return s.put(blob, id); }); }
+  function mediaGet(id) { return mediaTx("readonly", function (s) { return s.get(id); }).catch(function () { return null; }); }
+  function mediaDel(id) { delete mediaURLs[id]; return mediaTx("readwrite", function (s) { return s["delete"](id); }).catch(function () {}); }
+  function mediaURL(id) {
+    if (mediaURLs[id]) return Promise.resolve(mediaURLs[id]);
+    return mediaGet(id).then(function (blob) { if (!blob) return null; mediaURLs[id] = URL.createObjectURL(blob); return mediaURLs[id]; });
+  }
+
+  function sendVideo(f) {
+    if (f.size > 80 * 1024 * 1024) { toast("Ese vídeo es demasiado grande (máximo 80 MB)"); return; }
+    var id = "v" + rid() + rid();
+    toast("Enviando vídeo…");
+    // Los vídeos grandes no caben en el servidor de prueba: se quedan solo en este aparato
+    var c = chatById(currentChat), tooBig = !!(c && c.topic) && f.size > cloud.maxMedia * 0.7;
+    if (tooBig) toast("El vídeo es grande para el servidor de prueba: solo se verá en este aparato");
+    mediaPut(id, f).then(function () { addMessage(tooBig ? { video: id, vtype: f.type || "video/mp4", vlocal: true } : { video: id, vtype: f.type || "video/mp4" }); },
+      function () { toast("No se pudo guardar el vídeo: no queda espacio en este aparato"); });
+  }
+
+  // ===== VER FOTOS Y VÍDEOS EN GRANDE =====
+  var openImg = null;
+  function openImage(row, mine) {
+    openImg = row;
+    var img = $("ivImg"), vid = $("ivVideo");
+    img.style.display = row.image ? "" : "none";
+    vid.style.display = row.video ? "block" : "none";
+    if (row.image) img.src = row.image;
+    if (row.video) mediaURL(row.video).then(function (url) {
+      if (!url) { closeImage(); toast("Este vídeo no está en este aparato"); return; }
+      if (openImg === row) { vid.src = url; vid.play().catch(function () {}); }
+    });
+    $("ivWho").textContent = (mine ? "Tú" : row.name) + " · " + fmtWhen(row.created_at);
+    $("ivDelete").style.display = mine ? "" : "none";
+    $("ivDelete").setAttribute("aria-label", row.video ? "Borrar vídeo" : "Borrar foto");
+    $("ivDownload").setAttribute("aria-label", row.video ? "Descargar vídeo" : "Descargar foto");
+    $("imgViewer").classList.add("open");
+  }
+  function closeImage() {
+    openImg = null;
+    $("imgViewer").classList.remove("open");
+    $("ivImg").removeAttribute("src");
+    var vid = $("ivVideo"); vid.pause(); vid.removeAttribute("src"); vid.load();
+  }
+
+  // ===== STICKERS: 50 emojis, los que creas tú y tus favoritos =====
+  var stkTab = "emoji";
+  function stickerOwner() { return me || lastMe(); }
+  function getFavs() { var who = stickerOwner(), d = getDB(); return who && d.favs && d.favs[who.id] ? d.favs[who.id] : []; }
+  function sameItem(a, b) { return a.e ? a.e === b.e : (a.id && a.id === b.id) || (a.gif && a.gif === b.gif) || (!a.gif && a.img && a.img === b.img); }
+  function isFav(item) { return getFavs().some(function (f) { return sameItem(f, item); }); }
+  function toggleFav(item) {
+    var who = stickerOwner(); if (!who) return;
+    var d = getDB(); d.favs = d.favs || {};
+    var list = d.favs[who.id] || [];
+    var had = list.some(function (f) { return sameItem(f, item); });
+    d.favs[who.id] = had ? list.filter(function (f) { return !sameItem(f, item); }) : list.concat([item]);
+    saveDB(d);
+    if ($("stickerPanel").style.display !== "none") renderStickerPanel();
+  }
+  function myStickers() { var who = stickerOwner(); return who ? (getDB().stickers || []).filter(function (s) { return s.owner === who.id; }) : []; }
+
+  // Borra un sticker creado por ti (y lo quita de favoritos); los ya enviados en el chat se quedan
+  function deleteSticker(item) {
+    askConfirm(item.gif ? "¿Borrar este GIF? Los que ya hayas mandado en los chats se quedan." : "¿Borrar este sticker? Los que ya hayas mandado en los chats se quedan.", "Borrar", function () {
+      var d = getDB();
+      d.stickers = (d.stickers || []).filter(function (s) { return s.id !== item.id; });
+      if (d.favs) Object.keys(d.favs).forEach(function (k) { d.favs[k] = d.favs[k].filter(function (f) { return !sameItem(f, item); }); });
+      saveDB(d);
+      renderStickerPanel();
+      toast(item.gif ? "GIF borrado" : "Sticker borrado");
+    });
+  }
+
+  function sendSticker(item) {
+    $("stickerPanel").style.display = "none";
+    if (item.e) addMessage({ sticker: item.e });
+    else if (item.gif) addMessage({ gif: item.gif });
+    else addMessage({ stickerImg: item.img });
+  }
+
+  // ===== GIFS: secuencias de imágenes guardadas en IndexedDB, animadas aquí =====
+  var gifCache = {}, gifTick = 0;
+  function loadGif(id) {
+    if (!gifCache[id]) gifCache[id] = mediaGet(id).then(function (g) {
+      if (!g || !g.frames) return null;
+      return Promise.all(g.frames.map(function (src) {
+        return new Promise(function (res) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { res(null); }; im.src = src; });
+      })).then(function (imgs) { return { imgs: imgs.filter(Boolean), frames: g.frames, fps: g.fps || 8 }; });
+    });
+    return gifCache[id];
+  }
+  function makeGifCanvas(id, size) {
+    var c = document.createElement("canvas"); c.className = "gif-canvas"; c.width = c.height = size || 200;
+    loadGif(id).then(function (g) {
+      if (g && g.imgs.length) { c._gif = g; c.getContext("2d").drawImage(g.imgs[0], 0, 0, c.width, c.height); }
+      else { var s = document.createElement("div"); s.className = "video-missing"; s.textContent = "🎞️ GIF no disponible en este aparato"; c.replaceWith(s); }
+    });
+    return c;
+  }
+  setInterval(function () {
+    gifTick++;
+    document.querySelectorAll("canvas.gif-canvas").forEach(function (c) {
+      var g = c._gif; if (!g || !g.imgs.length) return;
+      var ctx = c.getContext("2d"); ctx.clearRect(0, 0, c.width, c.height);
+      ctx.drawImage(g.imgs[gifTick % g.imgs.length], 0, 0, c.width, c.height);
+    });
+  }, 125);
+
+  function renderStickerPanel() {
+    var p = $("stickerPanel"); p.innerHTML = "";
+    var tabs = document.createElement("div"); tabs.className = "stk-tabs";
+    [["fav", "⭐ Favoritos"], ["emoji", "😊 Emojis"], ["mine", "🎨 Mis stickers"]].forEach(function (t) {
+      var b = document.createElement("button"); b.className = "stk-tab" + (stkTab === t[0] ? " active" : ""); b.textContent = t[1];
+      b.onclick = function () { stkTab = t[0]; renderStickerPanel(); };
+      tabs.appendChild(b);
+    });
+    p.appendChild(tabs);
+    var grid = document.createElement("div"); grid.className = "stk-grid"; p.appendChild(grid);
+
+    var items;
+    if (stkTab === "fav") items = getFavs();
+    else if (stkTab === "emoji") items = STICKERS.map(function (e) { return { e: e }; });
+    else {
+      items = myStickers().map(function (s) { return s.gif ? { gif: s.gif, img: s.img, id: s.id } : { img: s.img, id: s.id }; });
+      var create = document.createElement("div"); create.className = "stk stk-create"; create.textContent = "＋ Crear";
+      create.onclick = openStickerCreator;
+      grid.appendChild(create);
+    }
+    if (!items.length && stkTab === "fav") { grid.innerHTML = '<div class="stk-empty">Aún no tienes favoritos.<br>Toca la ☆ de un sticker para guardarlo aquí.</div>'; return; }
+    if (!items.length && stkTab === "mine") {
+      var hint = document.createElement("div"); hint.className = "stk-empty"; hint.textContent = "Crea tu primer sticker con una foto, o un GIF con un vídeo.";
+      grid.appendChild(hint);
+    }
+    items.forEach(function (item) {
+      var el = document.createElement("div"); el.className = "stk";
+      if (item.e) el.textContent = item.e;
+      else {
+        var im = document.createElement("img"); im.src = item.img; im.alt = item.gif ? "GIF" : "Sticker"; el.appendChild(im);
+        if (item.gif) { var badge = document.createElement("span"); badge.className = "gif-badge"; badge.textContent = "GIF"; el.appendChild(badge); }
+      }
+      var star = document.createElement("button"); star.className = "fav-star";
+      var fav = isFav(item);
+      star.textContent = fav ? "★" : "☆";
+      star.title = fav ? "Quitar de favoritos" : "Guardar en favoritos";
+      star.onclick = function (e) { e.stopPropagation(); toggleFav(item); };
+      el.appendChild(star);
+      if (stkTab === "mine") {
+        var del = document.createElement("button"); del.className = "stk-del"; del.textContent = "🗑"; del.title = item.gif ? "Borrar GIF" : "Borrar sticker";
+        del.onclick = function (e) { e.stopPropagation(); deleteSticker(item); };
+        el.appendChild(del);
+      }
+      el.onclick = function () { sendSticker(item); };
+      grid.appendChild(el);
+    });
+  }
+
+  // ===== CREADOR DE STICKERS Y GIFS =====
+  // Fuente -> fotogramas cuadrados "base" -> quitar fondo (ops) -> forma + borde blanco + texto
+  var STK_OUT = 256, GIF_OUT = 200, GIF_FPS = 8, GIF_LEN = 2.5;
+  var stk = { kind: null, base: [], ops: [], shape: "circle", video: null, videoUrl: null, duration: 0, start: 0, out: [], anim: null, busy: false };
+
+  function colorDist(d, i, r, g, b) { var dr = d[i] - r, dg = d[i + 1] - g, db = d[i + 2] - b; return Math.sqrt(dr * dr + dg * dg + db * db); }
+
+  // Borra (alpha 0) los píxeles parecidos conectados a las semillas
+  function floodRemove(img, seeds, ref, tol) {
+    var w = img.width, h = img.height, d = img.data, seen = new Uint8Array(w * h), q = new Int32Array(w * h), qh = 0, qt = 0;
+    seeds.forEach(function (p) {
+      var k = p[1] * w + p[0];
+      if (!seen[k] && d[k * 4 + 3] > 0 && colorDist(d, k * 4, ref[0], ref[1], ref[2]) <= tol) { seen[k] = 1; q[qt++] = k; }
+    });
+    while (qh < qt) {
+      var k = q[qh++], x = k % w, y = (k - x) / w;
+      d[k * 4 + 3] = 0;
+      var nb = [x > 0 ? k - 1 : -1, x < w - 1 ? k + 1 : -1, y > 0 ? k - w : -1, y < h - 1 ? k + w : -1];
+      for (var n = 0; n < 4; n++) {
+        var j = nb[n];
+        if (j < 0 || seen[j]) continue;
+        seen[j] = 1;
+        if (d[j * 4 + 3] > 0 && colorDist(d, j * 4, ref[0], ref[1], ref[2]) <= tol) q[qt++] = j;
+      }
+    }
+  }
+
+  function applyOps(baseCanvas) {
+    var B = baseCanvas.width, c = document.createElement("canvas"); c.width = c.height = B;
+    var g = c.getContext("2d"); g.drawImage(baseCanvas, 0, 0);
+    if (!stk.ops.length) return c;
+    var img = g.getImageData(0, 0, B, B), d = img.data, tol = parseInt($("stkTol").value, 10);
+    stk.ops.forEach(function (op) {
+      if (op.type === "auto") {
+        // Color medio del borde y se borra lo parecido que toca los bordes
+        var seeds = [], r = 0, gg = 0, b = 0, n = 0;
+        for (var i = 0; i < B; i++) [[i, 0], [i, B - 1], [0, i], [B - 1, i]].forEach(function (p) {
+          var k = (p[1] * B + p[0]) * 4; r += d[k]; gg += d[k + 1]; b += d[k + 2]; n++; seeds.push(p);
+        });
+        floodRemove(img, seeds, [r / n, gg / n, b / n], tol);
+      } else {
+        var x = Math.max(0, Math.min(B - 1, Math.round(op.x * B))), y = Math.max(0, Math.min(B - 1, Math.round(op.y * B))), k = (y * B + x) * 4;
+        floodRemove(img, [[x, y]], [d[k], d[k + 1], d[k + 2]], tol);
+      }
+    });
+    g.putImageData(img, 0, 0);
+    return c;
+  }
+
+  function stickerPad(S) { return Math.round(S * 0.04); }
+  function composeFrame(processed, S) {
+    var c = document.createElement("canvas"); c.width = c.height = S;
+    var g = c.getContext("2d"), pad = stickerPad(S), inner = S - pad * 2;
+    if (stk.shape === "none") {
+      // Silueta blanca alrededor del recorte, como las pegatinas
+      var sil = document.createElement("canvas"); sil.width = sil.height = S;
+      var sg = sil.getContext("2d"); sg.drawImage(processed, pad, pad, inner, inner);
+      sg.globalCompositeOperation = "source-in"; sg.fillStyle = "#FFFFFF"; sg.fillRect(0, 0, S, S);
+      var r = Math.max(2, Math.round(S * 0.022));
+      for (var a = 0; a < 16; a++) g.drawImage(sil, Math.cos(a / 16 * Math.PI * 2) * r, Math.sin(a / 16 * Math.PI * 2) * r);
+      g.drawImage(processed, pad, pad, inner, inner);
+    } else {
+      g.save(); g.beginPath();
+      if (stk.shape === "circle") g.arc(S / 2, S / 2, inner / 2, 0, Math.PI * 2);
+      else if (g.roundRect) g.roundRect(pad, pad, inner, inner, S * 0.11);
+      else g.rect(pad, pad, inner, inner);
+      g.closePath();
+      g.lineWidth = S * 0.055; g.strokeStyle = "#FFFFFF"; g.stroke();
+      g.clip();
+      g.drawImage(processed, pad, pad, inner, inner);
+      g.restore();
+    }
+    var text = $("stkText").value.trim();
+    if (text) {
+      g.font = "700 " + Math.round(S * 0.133) + "px Fredoka, sans-serif"; g.textAlign = "center"; g.lineJoin = "round";
+      g.lineWidth = S * 0.027; g.strokeStyle = "#000000"; g.strokeText(text, S / 2, S * 0.9, S - 20);
+      g.fillStyle = "#FFFFFF"; g.fillText(text, S / 2, S * 0.9, S - 20);
+    }
+    return c;
+  }
+
+  function renderStk() {
+    var view = $("stkCanvas"), vg = view.getContext("2d");
+    clearInterval(stk.anim); stk.anim = null;
+    vg.clearRect(0, 0, 256, 256);
+    if (!stk.base.length) {
+      vg.fillStyle = "#8A6F62"; vg.font = "600 20px Fredoka, sans-serif"; vg.textAlign = "center";
+      vg.fillText(stk.busy ? "Preparando…" : "Elige una foto o un vídeo", 128, 134);
+      stk.out = [];
+      return;
+    }
+    var S = stk.kind === "gif" ? GIF_OUT : STK_OUT;
+    stk.out = stk.base.map(function (b) { return composeFrame(applyOps(b), S); });
+    var i = 0;
+    function show() { vg.clearRect(0, 0, 256, 256); vg.drawImage(stk.out[i % stk.out.length], 0, 0, 256, 256); i++; }
+    show();
+    if (stk.out.length > 1) stk.anim = setInterval(show, 1000 / GIF_FPS);
+  }
+  var renderStkTimer = null;
+  function renderStkSoon() { clearTimeout(renderStkTimer); renderStkTimer = setTimeout(renderStk, 120); }
+
+  function squareFrom(source, sw, sh, B) {
+    var c = document.createElement("canvas"); c.width = c.height = B;
+    var side = Math.min(sw, sh);
+    c.getContext("2d").drawImage(source, (sw - side) / 2, (sh - side) / 2, side, side, 0, 0, B, B);
+    return c;
+  }
+
+  function seekTo(video, t) {
+    return new Promise(function (res) {
+      var done = false;
+      function fin() { if (done) return; done = true; video.removeEventListener("seeked", fin); res(); }
+      video.addEventListener("seeked", fin);
+      setTimeout(fin, 1500);
+      video.currentTime = Math.max(0, Math.min(t, (video.duration || t) - 0.05));
+    });
+  }
+
+  function extractGifFrames() {
+    var v = stk.video; if (!v) return;
+    var len = Math.min(GIF_LEN, stk.duration), n = Math.max(2, Math.round(len * GIF_FPS)), frames = [], token = {};
+    stk.extractToken = token; stk.busy = true; stk.base = []; renderStk();
+    $("stkHint").textContent = "Preparando el GIF…";
+    var chain = Promise.resolve();
+    for (var i = 0; i < n; i++) (function (i) {
+      chain = chain.then(function () {
+        if (stk.extractToken !== token) return;
+        return seekTo(v, stk.start + i / GIF_FPS).then(function () { frames.push(squareFrom(v, v.videoWidth, v.videoHeight, GIF_OUT)); });
+      });
+    })(i);
+    chain.then(function () {
+      if (stk.extractToken !== token) return;
+      stk.busy = false; stk.base = frames;
+      $("stkHint").textContent = "Toca el fondo para borrarlo";
+      renderStk();
+    });
+  }
+
+  function updateClipLabel() {
+    var len = Math.min(GIF_LEN, stk.duration);
+    $("stkStartLabel").textContent = "Desde el segundo " + stk.start.toFixed(1).replace(".", ",") + " · dura " + len.toFixed(1).replace(".", ",") + " s";
+  }
+
+  function resetStk() {
+    clearInterval(stk.anim); stk.extractToken = null;
+    if (stk.videoUrl) URL.revokeObjectURL(stk.videoUrl);
+    stk = { kind: null, base: [], ops: [], shape: "circle", video: null, videoUrl: null, duration: 0, start: 0, out: [], anim: null, busy: false };
+  }
+
+  function openStickerCreator() {
+    resetStk();
+    $("stkText").value = ""; $("stkError").textContent = "";
+    $("stkClipField").style.display = "none"; $("stkBgField").style.display = "none";
+    $("stkHint").textContent = "Elige una foto o un vídeo";
+    $("stkSaveBtn").textContent = "Guardar sticker";
+    $("stkCanvas").classList.remove("picking");
+    document.querySelectorAll("#stkShape .seg-btn").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-shape") === stk.shape); });
+    renderStk();
+    $("stickerModal").classList.add("open");
+  }
+  function closeStickerCreator() { resetStk(); $("stickerModal").classList.remove("open"); }
+
+  function initStickers() {
+    $("stkPhotoBtn").onclick = function () { $("stkFile").click(); };
+    $("stkVideoBtn").onclick = function () { $("stkVideoFile").click(); };
+    $("stkFile").onchange = function () {
+      var f = this.files && this.files[0]; this.value = "";
+      if (!f) return;
+      var r = new FileReader();
+      r.onload = function () {
+        var im = new Image();
+        im.onload = function () {
+          resetStk(); applyShapeButtons();
+          stk.kind = "photo"; stk.base = [squareFrom(im, im.width, im.height, STK_OUT)];
+          $("stkClipField").style.display = "none"; $("stkBgField").style.display = "block";
+          $("stkSaveBtn").textContent = "Guardar sticker";
+          $("stkHint").textContent = "Toca el fondo para borrarlo";
+          $("stkCanvas").classList.add("picking");
+          renderStk();
+        };
+        im.src = r.result;
+      };
+      r.readAsDataURL(f);
+    };
+    $("stkVideoFile").onchange = function () {
+      var f = this.files && this.files[0]; this.value = "";
+      if (!f) return;
+      resetStk(); applyShapeButtons();
+      var v = document.createElement("video");
+      v.muted = true; v.playsInline = true; v.preload = "auto";
+      stk.kind = "gif"; stk.video = v; stk.videoUrl = URL.createObjectURL(f); stk.busy = true;
+      renderStk();
+      v.onloadeddata = function () {
+        stk.duration = v.duration || 0;
+        var maxStart = Math.max(0, stk.duration - GIF_LEN);
+        $("stkStart").max = maxStart.toFixed(1); $("stkStart").value = 0; stk.start = 0;
+        $("stkClipField").style.display = maxStart > 0 ? "block" : "none";
+        $("stkBgField").style.display = "block";
+        $("stkSaveBtn").textContent = "Guardar GIF";
+        $("stkCanvas").classList.add("picking");
+        updateClipLabel();
+        extractGifFrames();
+      };
+      v.onerror = function () { toast("No se pudo abrir ese vídeo"); resetStk(); renderStk(); };
+      v.src = stk.videoUrl;
+    };
+    var startTimer = null;
+    $("stkStart").oninput = function () {
+      stk.start = parseFloat(this.value) || 0; updateClipLabel();
+      clearTimeout(startTimer); startTimer = setTimeout(extractGifFrames, 350);
+    };
+    $("stkCanvas").addEventListener("click", function (e) {
+      if (!stk.base.length || stk.busy) return;
+      var r = this.getBoundingClientRect(), S = r.width, pad = stickerPad(S), inner = S - pad * 2;
+      var x = (e.clientX - r.left - pad) / inner, y = (e.clientY - r.top - pad) / inner;
+      if (x < 0 || y < 0 || x > 1 || y > 1) return;
+      stk.ops.push({ type: "point", x: x, y: y });
+      renderStk();
+    });
+    $("stkAutoBg").onclick = function () { if (stk.base.length) { stk.ops.push({ type: "auto" }); renderStk(); } };
+    $("stkUndoBg").onclick = function () { if (stk.ops.length) { stk.ops.pop(); renderStk(); } };
+    $("stkTol").oninput = renderStkSoon;
+    function applyShapeButtons() {
+      document.querySelectorAll("#stkShape .seg-btn").forEach(function (x) { x.classList.toggle("active", x.getAttribute("data-shape") === stk.shape); });
+    }
+    document.querySelectorAll("#stkShape .seg-btn").forEach(function (b) {
+      b.onclick = function () { stk.shape = b.getAttribute("data-shape"); applyShapeButtons(); renderStk(); };
+    });
+    $("stkText").addEventListener("input", renderStkSoon);
+    $("stkCancelBtn").onclick = closeStickerCreator;
+    $("stickerModal").onclick = function (e) { if (e.target === $("stickerModal")) closeStickerCreator(); };
+    $("stkSaveBtn").onclick = function () {
+      if (!stk.base.length || !stk.out.length) { $("stkError").textContent = stk.busy ? "Espera un momento, se está preparando." : "Elige una foto o un vídeo."; return; }
+      var who = stickerOwner(); if (!who) return;
+      function enc(c) { var u = c.toDataURL("image/webp", 0.8); return u.indexOf("data:image/webp") === 0 ? u : c.toDataURL("image/png"); }
+      var d = getDB(); d.stickers = d.stickers || [];
+      var id = "s" + rid() + rid(), now = new Date().toISOString();
+      function done(msg) {
+        closeStickerCreator();
+        stkTab = "mine"; $("stickerPanel").style.display = "block"; renderStickerPanel();
+        toast(msg);
+      }
+      if (stk.kind !== "gif") {
+        d.stickers.push({ id: id, owner: who.id, img: enc(stk.out[0]), created_at: now });
+        if (saveDB(d)) done("Sticker creado 🎨");
+        return;
+      }
+      var frames = stk.out.map(enc), gid = "g" + rid() + rid();
+      $("stkSaveBtn").disabled = true;
+      mediaPut(gid, { frames: frames, fps: GIF_FPS }).then(function () {
+        $("stkSaveBtn").disabled = false;
+        var d2 = getDB(); d2.stickers = d2.stickers || [];
+        d2.stickers.push({ id: id, owner: who.id, gif: gid, img: frames[0], created_at: now });
+        if (saveDB(d2)) done("GIF creado 🎞️");
+      }, function () { $("stkSaveBtn").disabled = false; $("stkError").textContent = "No queda espacio para guardar el GIF."; });
+    };
+  }
+
+  function dataUrlToBlob(url) {
+    var parts = url.split(","), mime = (parts[0].match(/:(.*?);/) || [])[1] || "image/jpeg";
+    var bin = atob(parts[1]), arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+
+  // Descargar un archivo: dentro de claude.ai pasa por su aviso de descarga; abierto como archivo normal, descarga directa
+  function downloadFile(filename, data, okText) {
+    function direct() {
+      var blob = data instanceof Blob ? data : new Blob([data], { type: "application/octet-stream" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    }
+    var use = window.claude && window.claude.use ? window.claude.use("downloads") : Promise.resolve(null);
+    use.then(function (downloads) {
+      if (!downloads) { direct(); return; }
+      downloads.save({ filename: filename, data: data }).then(function () { if (okText) toast(okText); }, function (e) {
+        if (e && e.code !== "declined") toast("No se pudo descargar");
+      });
+    }, direct);
+  }
+
+  // ===== AUDIOS DE VOZ =====
+  var msgAudio = null, rec = null, MAX_REC = 120;
+
+  function stopMsgAudio() { if (msgAudio) { msgAudio.audio.pause(); msgAudio.reset(); msgAudio = null; } }
+
+  function wireAudio(bubble, row) {
+    var btn = bubble.querySelector(".audio-play"), track = bubble.querySelector(".audio-track"), fill = track.querySelector("i"), time = bubble.querySelector(".audio-time");
+    var audio = null;
+    function reset() { btn.textContent = "▶"; fill.style.width = "0"; time.textContent = fmtDur(row.dur || 0); }
+    function ensure() {
+      if (audio) return audio;
+      audio = new Audio(row.audio);
+      audio.ontimeupdate = function () {
+        var total = isFinite(audio.duration) ? audio.duration : (row.dur || 1);
+        fill.style.width = Math.min(100, audio.currentTime / total * 100) + "%";
+        time.textContent = fmtDur(Math.floor(audio.currentTime));
+      };
+      audio.onended = function () { reset(); if (msgAudio && msgAudio.audio === audio) msgAudio = null; };
+      return audio;
+    }
+    btn.onclick = function (e) {
+      e.stopPropagation();
+      var a = ensure();
+      if (!a.paused) { a.pause(); btn.textContent = "▶"; return; }
+      if (msgAudio && msgAudio.audio !== a) stopMsgAudio();
+      msgAudio = { audio: a, reset: reset };
+      a.play().then(function () { btn.textContent = "⏸"; }, function () { toast("No se pudo reproducir el audio"); });
+    };
+    track.onclick = function (e) {
+      e.stopPropagation();
+      var a = ensure(), r = track.getBoundingClientRect(), total = isFinite(a.duration) ? a.duration : (row.dur || 0);
+      if (total) a.currentTime = (e.clientX - r.left) / r.width * total;
+    };
+  }
+
+  function showRecordUI(on) {
+    $("chatInputRow").style.display = on ? "none" : "flex";
+    $("recordRow").style.display = on ? "flex" : "none";
+  }
+
+  function startRecording() {
+    var md = navigator.mediaDevices;
+    if (!md || !md.getUserMedia || !window.MediaRecorder) { toast("Este navegador no permite grabar audios"); return; }
+    if (rec) return;
+    md.getUserMedia({ audio: true }).then(function (stream) {
+      var types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"], type = "";
+      for (var i = 0; i < types.length; i++) if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(types[i])) { type = types[i]; break; }
+      var mr;
+      try { mr = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 }); }
+      catch (e) { mr = new MediaRecorder(stream); }
+      var r = rec = { mr: mr, chunks: [], start: Date.now(), cancelled: false, chat: currentChat };
+      mr.ondataavailable = function (e) { if (e.data && e.data.size) r.chunks.push(e.data); };
+      mr.onstop = function () {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        clearInterval(r.timer);
+        showRecordUI(false);
+        if (r.cancelled || !r.chunks.length || r.chat !== currentChat) return;
+        var secs = Math.max(1, Math.round((Date.now() - r.start) / 1000));
+        var fr = new FileReader();
+        fr.onload = function () { addMessage({ audio: fr.result, dur: secs }); };
+        fr.readAsDataURL(new Blob(r.chunks, { type: mr.mimeType || type || "audio/webm" }));
+      };
+      mr.start(250);
+      showRecordUI(true);
+      $("recLabel").textContent = "Grabando 0:00";
+      r.timer = setInterval(function () {
+        var s = Math.floor((Date.now() - r.start) / 1000);
+        $("recLabel").textContent = "Grabando " + Math.floor(s / 60) + ":" + (s % 60).toString().padStart(2, "0");
+        if (s >= MAX_REC) stopRecording(false);
+      }, 250);
+    }, function () { toast("No se pudo usar el micrófono. Revisa los permisos del navegador."); });
+  }
+
+  function stopRecording(cancel) {
+    if (!rec) return;
+    var r = rec; rec = null;
+    r.cancelled = !!cancel;
+    try { r.mr.stop(); } catch (e) { showRecordUI(false); }
+  }
+
+  function initChat() {
+    $("micBtn").onclick = startRecording;
+    $("photoBtn").onclick = function () { $("photoFile").click(); };
+    $("photoFile").onchange = function () {
+      var f = this.files && this.files[0]; this.value = "";
+      if (!f) return;
+      if (/^video\//.test(f.type)) sendVideo(f);
+      else shrinkImage(f, function (url) { addMessage({ image: url }); });
+    };
+    initStickers();
+    $("ivClose").onclick = closeImage;
+    $("imgViewer").onclick = function (e) { if (e.target === $("imgViewer")) closeImage(); };
+    $("ivDownload").onclick = function () {
+      if (!openImg) return;
+      var row = openImg, d = new Date(row.created_at), stamp = d.toISOString().slice(0, 10) + "-" + fmtTime(row.created_at).replace(":", "");
+      if (row.image) { downloadFile("foto-" + stamp + ".jpg", dataUrlToBlob(row.image), "Foto descargada"); return; }
+      mediaGet(row.video).then(function (blob) {
+        if (!blob) { toast("Este vídeo no está en este aparato"); return; }
+        downloadFile("video-" + stamp + (/webm/.test(row.vtype || "") ? ".webm" : ".mp4"), blob, "Vídeo descargado");
+      });
+    };
+    $("ivDelete").onclick = function () {
+      if (!openImg) return;
+      var id = openImg.id, video = openImg.video;
+      askConfirm(video ? "¿Borrar este vídeo? Se borra para todos." : "¿Borrar esta foto? Se borra para todos.", "Borrar", function () {
+        closeImage();
+        killMessage(currentChat, id);
+      });
+    };
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && openImg) closeImage(); });
+    $("recCancelBtn").onclick = function () { stopRecording(true); };
+    $("recSendBtn").onclick = function () { stopRecording(false); };
+    var input = $("msgInput");
+    function send() {
+      var text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      addMessage({ text: text });
+    }
+    $("sendBtn").onclick = send;
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") send(); });
+
+    var stickerPanel = $("stickerPanel");
+    $("stickerToggleBtn").onclick = function () {
+      var show = stickerPanel.style.display === "none";
+      stickerPanel.style.display = show ? "block" : "none";
+      if (show) renderStickerPanel();
+    };
+  }
+
+  // ===== DIBUJO EN EL FONDO DEL CHAT =====
+  var canvas, ctx, strokes = [], curStroke = null, remoteStrokes = {};
+  var currentColor = BRUSH_COLORS[0], currentSize = 6, eraser = false, remoteDrawTimer = null;
+
+  function W() { return canvas.clientWidth; }
+  function H() { return canvas.clientHeight; }
+  function r3(n) { return Math.round(n * 1000) / 1000; }
+  function sendDraw(m) { m.chatId = currentChat; m.name = me ? me.name : ""; bus.send(m); }
+  function reloadStrokes() { strokes = currentChat ? getDB().strokes.filter(function (s) { return s.chat_id === currentChat; }) : []; }
+
+  function resizeCanvas() {
+    if (!canvas) return;
+    var w = W(), h = H(), dpr = window.devicePixelRatio || 1;
+    if (!w || !h) return;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    redrawAll();
+  }
+  function strokeStyle(st) {
+    ctx.globalCompositeOperation = st.e ? "destination-out" : "source-over";
+    ctx.strokeStyle = st.c; ctx.lineWidth = st.s; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  }
+  function drawStroke(st) {
+    var p = st.pts; if (!p || !p.length) return;
+    ctx.save(); strokeStyle(st); ctx.beginPath();
+    ctx.moveTo(p[0][0] * W(), p[0][1] * H());
+    if (p.length === 1) ctx.lineTo(p[0][0] * W() + 0.01, p[0][1] * H());
+    for (var i = 1; i < p.length; i++) ctx.lineTo(p[i][0] * W(), p[i][1] * H());
+    ctx.stroke(); ctx.restore();
+  }
+  function drawSeg(st, a, b) {
+    ctx.save(); strokeStyle(st); ctx.beginPath();
+    ctx.moveTo(a[0] * W(), a[1] * H());
+    ctx.lineTo(b[0] * W() + (a === b ? 0.01 : 0), b[1] * H());
+    ctx.stroke(); ctx.restore();
+  }
+  function redrawAll() {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, W(), H());
+    strokes.forEach(drawStroke);
+    if (curStroke) drawStroke(curStroke);
+    Object.keys(remoteStrokes).forEach(function (k) { drawStroke(remoteStrokes[k]); });
+  }
+  function setDrawMode(on) {
+    $("chatStage").classList.toggle("drawing", on);
+    $("drawToolbar").style.display = on ? "flex" : "none";
+    $("chatInputRow").style.display = on ? "none" : "flex";
+    $("stickerPanel").style.display = "none";
+  }
+  function showRemoteDrawing(name) {
+    var el = $("remoteDrawing");
+    el.textContent = "✏️ " + name + " está dibujando…"; el.classList.add("show");
+    clearTimeout(remoteDrawTimer); remoteDrawTimer = setTimeout(function () { el.classList.remove("show"); }, 1500);
+  }
+
+  function initDraw() {
+    canvas = $("bgCanvas"); ctx = canvas.getContext("2d");
+    if (window.ResizeObserver) new ResizeObserver(resizeCanvas).observe($("chatStage"));
+    else window.addEventListener("resize", resizeCanvas);
+
+    var pal = $("colorPalette");
+    BRUSH_COLORS.forEach(function (c, i) {
+      var sw = document.createElement("div"); sw.className = "color-swatch" + (i === 0 ? " selected" : ""); sw.style.background = c;
+      if (c === "#FFFFFF") sw.style.boxShadow = "inset 0 0 0 1px #ddd";
+      sw.onclick = function () {
+        pal.querySelectorAll(".color-swatch").forEach(function (x) { x.classList.remove("selected"); });
+        sw.classList.add("selected"); currentColor = c; eraser = false; $("eraserBtn").classList.remove("on");
+      };
+      pal.appendChild(sw);
+    });
+    $("eraserBtn").onclick = function () { eraser = !eraser; this.classList.toggle("on", eraser); };
+    $("brushSize").oninput = function (e) { currentSize = parseInt(e.target.value, 10); };
+    $("drawToggleBtn").onclick = function () { setDrawMode(true); };
+    $("drawDoneBtn").onclick = function () { setDrawMode(false); };
+
+    function pos(e) {
+      var rect = canvas.getBoundingClientRect();
+      return [r3((e.clientX - rect.left) / rect.width), r3((e.clientY - rect.top) / rect.height)];
+    }
+    canvas.addEventListener("pointerdown", function (e) {
+      if (!currentChat || !me) return;
+      e.preventDefault();
+      try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
+      var p = pos(e);
+      curStroke = { id: rid() + rid(), t: Date.now(), chat_id: currentChat, a: me.id, c: currentColor, s: eraser ? currentSize * 2.5 : currentSize, e: eraser ? 1 : 0, pts: [p] };
+      drawSeg(curStroke, p, p);
+      sendDraw({ type: "stroke-start", st: JSON.parse(JSON.stringify(curStroke)) });
+    });
+    canvas.addEventListener("pointermove", function (e) {
+      if (!curStroke) return;
+      if (e.pointerType === "mouse" && e.buttons === 0) { endStroke(); return; }
+      e.preventDefault();
+      var p = pos(e), last = curStroke.pts[curStroke.pts.length - 1];
+      if (Math.abs(p[0] - last[0]) * W() < 1.5 && Math.abs(p[1] - last[1]) * H() < 1.5) return;
+      curStroke.pts.push(p);
+      drawSeg(curStroke, last, p);
+      // Los puntos se mandan en tandas para no saturar el servidor
+      ptBuffer.push(p);
+      if (!ptTimer) ptTimer = setTimeout(flushPts, 160);
+    });
+    var ptBuffer = [], ptTimer = null;
+    function flushPts() {
+      ptTimer = null;
+      if (!ptBuffer.length || !curStroke) { ptBuffer = []; return; }
+      sendDraw({ type: "stroke-pts", id: curStroke.id, pts: ptBuffer });
+      ptBuffer = [];
+    }
+    function endStroke() {
+      if (!curStroke) return;
+      clearTimeout(ptTimer); flushPts();
+      var st = curStroke; curStroke = null;
+      var d = getDB(); d.strokes.push(st);
+      var inChat = d.strokes.filter(function (s) { return s.chat_id === st.chat_id; });
+      if (inChat.length > 1500) { var drop = inChat[0].id; d.strokes = d.strokes.filter(function (s) { return s.id !== drop; }); }
+      saveDB(d); reloadStrokes();
+      sendDraw({ type: "stroke-end", id: st.id });
+      cloud.changed(st.chat_id);
+    }
+    canvas.addEventListener("pointerup", endStroke);
+    canvas.addEventListener("pointercancel", endStroke);
+    window.addEventListener("pointerup", endStroke);
+    window.addEventListener("blur", endStroke);
+
+    $("undoBtn").onclick = function () {
+      reloadStrokes();
+      for (var i = strokes.length - 1; i >= 0; i--) {
+        if (me && strokes[i].a === me.id) {
+          var id = strokes[i].id, d = getDB(), c = chatById(currentChat, d);
+          d.strokes = d.strokes.filter(function (s) { return s.id !== id; });
+          if (c) { c.dead = c.dead || { m: {}, s: {} }; c.dead.s[id] = 1; }
+          saveDB(d); reloadStrokes(); redrawAll();
+          sendDraw({ type: "stroke-undo" });
+          cloud.changed(currentChat); return;
+        }
+      }
+      toast("No tienes trazos que deshacer");
+    };
+    $("clearBtn").onclick = function () {
+      askConfirm("¿Borrar todo el dibujo del fondo? Se borra para todos.", "Borrar", function () {
+        var d = getDB(), id = currentChat, c = chatById(id, d);
+        d.strokes = d.strokes.filter(function (s) { return s.chat_id !== id; });
+        if (c) c.clearedAt = Date.now();
+        saveDB(d); reloadStrokes(); redrawAll();
+        sendDraw({ type: "stroke-clear" });
+        cloud.changed(id);
+      });
+    };
+  }
+
+  function onDrawMessage(m) {
+    if (!canvas || !currentChat || m.chatId !== currentChat) return;
+    if (m.type === "stroke-start" && m.st) {
+      remoteStrokes[m.st.id] = m.st;
+      drawSeg(m.st, m.st.pts[0], m.st.pts[0]); showRemoteDrawing(m.name);
+    } else if (m.type === "stroke-pt") {
+      var st = remoteStrokes[m.id]; if (!st) return;
+      var last = st.pts[st.pts.length - 1]; st.pts.push(m.p); drawSeg(st, last, m.p); showRemoteDrawing(m.name);
+    } else if (m.type === "stroke-pts") {
+      var sp = remoteStrokes[m.id]; if (!sp || !m.pts) return;
+      m.pts.forEach(function (p) { var lp = sp.pts[sp.pts.length - 1]; sp.pts.push(p); drawSeg(sp, lp, p); });
+      showRemoteDrawing(m.name);
+    } else if (m.type === "stroke-end") {
+      // Si viene de otro aparato, se queda dibujado hasta que llegue guardado en el chat
+      var done = remoteStrokes[m.id]; delete remoteStrokes[m.id];
+      reloadStrokes();
+      if (done && !strokes.some(function (s) { return s.id === done.id; })) strokes.push(done);
+    } else {
+      if (m.type === "stroke-clear") remoteStrokes = {};
+      reloadStrokes(); redrawAll();
+    }
+  }
+
+  // ===== STORIES (como los estados de WhatsApp, duran 24 horas) =====
+  var STORY_FONTS = [
+    ["Fredoka", "'Fredoka', sans-serif", 600], ["Inter", "'Inter', sans-serif", 700], ["Pacifico", "'Pacifico', cursive", 400],
+    ["Lobster", "'Lobster', cursive", 400], ["Caveat", "'Caveat', cursive", 600], ["Bebas", "'Bebas Neue', sans-serif", 400],
+    ["Playfair", "'Playfair Display', serif", 600], ["Marker", "'Permanent Marker', cursive", 400],
+    ["Dancing", "'Dancing Script', cursive", 600], ["Pixel", "'Press Start 2P', monospace", 400]
+  ];
+  var TEXT_COLORS = ["#FFFFFF","#000000","#402A22","#F08A5D","#E85D75","#D4A72C","#3FA796","#4F86C6","#8E6BC7","#FFD9BB"];
+  var storyBg = STORY_BGS[0], storyImage = null, viewer = null;
+  var storyFont = 0, storyTc = "#FFFFFF", storySize = 9, storyPos = { x: 0.5, y: 0.5 };
+  var storyZoom = 1, storyPan = { x: 0, y: 0 }, storyOvs = [], storySel = -1;
+
+  // ===== CAPAS DE LA STORY: foto (con zoom) y stickers/emojis encima =====
+  // Todo en % del marco y en cqw, para que se vea igual en el editor y al verla
+  function stylePhoto(img, s) {
+    img.style.transform = "translate(-50%,-50%) translate(" + (s.px || 0) + "%," + (s.py || 0) + "%) scale(" + (s.zoom || 1) + ")";
+  }
+  function styleOv(el, ov) {
+    el.style.left = (ov.x * 100) + "%"; el.style.top = (ov.y * 100) + "%";
+    if (ov.t === "e") { el.style.fontSize = ov.size + "cqw"; el.style.width = ""; }
+    else el.style.width = ov.size + "cqw";
+  }
+  function makeOv(ov) {
+    var el = document.createElement("div"); el.className = "story-ov";
+    if (ov.t === "e") el.textContent = ov.v;
+    else if (ov.t === "gif") el.appendChild(makeGifCanvas(ov.v, 200));
+    else { var im = document.createElement("img"); im.src = ov.v; im.alt = ""; el.appendChild(im); }
+    styleOv(el, ov);
+    return el;
+  }
+  function renderStoryLayers(container, s) {
+    container.querySelectorAll(".story-photo, .story-ov").forEach(function (n) { n.remove(); });
+    if (s.image) {
+      var img = document.createElement("img"); img.className = "story-photo"; img.alt = ""; img.src = s.image;
+      stylePhoto(img, s); container.appendChild(img);
+    }
+    (s.overlays || []).forEach(function (ov, i) { var el = makeOv(ov); el.dataset.i = i; container.appendChild(el); });
+  }
+
+  // Coloca y da estilo al texto de una story (igual en el editor que al verla)
+  function renderStoryText(el, s) {
+    var f = STORY_FONTS[s.font || 0] || STORY_FONTS[0];
+    var x = s.x !== undefined ? s.x : 0.5, y = s.y !== undefined ? s.y : (s.image ? 0.85 : 0.5);
+    el.style.fontFamily = f[1]; el.style.fontWeight = f[2];
+    el.style.color = s.tc || "#FFFFFF";
+    el.style.fontSize = (s.size || (s.image ? 6 : 9)) + "cqw";
+    el.style.left = (x * 100) + "%"; el.style.top = (y * 100) + "%";
+    el.classList.toggle("on-photo", !!s.image);
+  }
+
+  function liveStories(d) {
+    var limit = Date.now() - STORY_HOURS * 3600 * 1000;
+    return (d || getDB()).stories.filter(function (s) { return new Date(s.created_at).getTime() > limit; });
+  }
+  function pruneStories() {
+    var d = getDB(), live = liveStories(d);
+    if (live.length !== d.stories.length) { d.stories = live; saveDB(d); }
+  }
+  function groupStories(list) {
+    var groups = {}, order = [];
+    list.forEach(function (s) {
+      if (!groups[s.user_id]) { groups[s.user_id] = { user_id: s.user_id, name: s.name, color: s.color, items: [] }; order.push(s.user_id); }
+      groups[s.user_id].items.push(s);
+    });
+    return order.map(function (k) { return groups[k]; }).sort(function (a, b) {
+      return new Date(b.items[b.items.length - 1].created_at) - new Date(a.items[a.items.length - 1].created_at);
+    });
+  }
+
+  function renderStories() {
+    pruneStories();
+    var all = liveStories(), mineIds = myIds(), seen = loadJSON("cf_story_seen", {});
+    var mineGroups = groupStories(all.filter(function (s) { return mineIds[s.user_id]; }));
+    var otherGroups = groupStories(all.filter(function (s) { return !mineIds[s.user_id]; }));
+    fillStoryList($("myStories"), mineGroups, seen, '<div class="info-card">Aún no has publicado ninguna story. Toca <b>＋ Publicar story</b> para compartir un texto o una foto. Se borra sola a las 24 horas.</div>', true);
+    fillStoryList($("otherStories"), otherGroups, seen, '<div class="empty-state" style="padding:16px">Nadie más ha publicado stories hoy.</div>', false);
+  }
+
+  function fillStoryList(box, groups, seen, emptyHtml, mine) {
+    if (!groups.length) { box.innerHTML = emptyHtml; return; }
+    box.innerHTML = "";
+    groups.forEach(function (g, gi) {
+      var last = g.items[g.items.length - 1];
+      var allSeen = g.items.every(function (s) { return seen[s.id]; });
+      var row = document.createElement("div"); row.className = "story-person";
+      row.innerHTML = '<div class="story-avatar' + (allSeen && !mine ? " seen" : "") + '"><div></div></div><div class="story-info"><div class="sname"></div><div class="swhen"></div></div>';
+      var face = row.querySelector(".story-avatar > div");
+      if (last.image) face.style.backgroundImage = "url(" + last.image + ")";
+      else if (profilePhoto(g.user_id)) paintAvatar(face, g.user_id, g.name, g.color);
+      else { face.style.background = last.bg || g.color; face.textContent = initial(g.name); }
+      row.querySelector(".sname").textContent = mine ? "Tú (" + g.name + ")" : g.name;
+      row.querySelector(".swhen").textContent = g.items.length + (g.items.length === 1 ? " story · " : " stories · ") + fmtAgo(last.created_at);
+      row.onclick = function () { openViewer(groups, gi); };
+      box.appendChild(row);
+    });
+  }
+
+  function draftStory() { return { image: storyImage, zoom: storyZoom, px: storyPan.x, py: storyPan.y, overlays: storyOvs }; }
+  // Rehace las capas (al añadir/quitar algo); para mover o ampliar basta con refreshStoryLayers
+  function rebuildStoryLayers() { renderStoryLayers($("storyPreview"), draftStory()); refreshStoryLayers(); }
+  function refreshStoryLayers() {
+    var pv = $("storyPreview"), img = pv.querySelector(".story-photo");
+    if (img) stylePhoto(img, draftStory());
+    pv.querySelectorAll(".story-ov").forEach(function (el) {
+      var i = +el.dataset.i; if (!storyOvs[i]) return;
+      styleOv(el, storyOvs[i]); el.classList.toggle("selected", i === storySel);
+    });
+    $("storyOvField").style.display = storySel >= 0 && storyOvs[storySel] ? "block" : "none";
+    if (storySel >= 0 && storyOvs[storySel]) $("storyOvSize").value = storyOvs[storySel].size;
+    $("storyZoomField").style.display = storyImage ? "block" : "none";
+    $("storyZoom").value = storyZoom;
+    pv.classList.toggle("has-photo", !!storyImage);
+    $("storyHint").textContent = storyImage ? "Arrastra la foto, el texto o los stickers para moverlos" : "Arrastra el texto o los stickers para moverlos";
+  }
+
+  function updateStoryPreview() {
+    var pv = $("storyPreview"), box = $("storyTextBox"), text = $("storyText").value.trim();
+    pv.style.backgroundImage = "none";
+    pv.style.backgroundColor = storyImage ? "#000" : storyBg;
+    box.textContent = text || "Escribe algo…";
+    box.classList.toggle("placeholder", !text);
+    renderStoryText(box, { font: storyFont, tc: storyTc, size: storySize, x: storyPos.x, y: storyPos.y, image: storyImage });
+    $("storyBgField").style.display = storyImage ? "none" : "block";
+    $("storyPhotoBtn").textContent = storyImage ? "📷 Cambiar foto" : "📷 Añadir foto";
+    $("storyNoPhotoBtn").style.display = storyImage ? "" : "none";
+  }
+
+  function openStoryModal() {
+    var last = lastMe();
+    storyImage = null; storyBg = last ? last.color : STORY_BGS[0];
+    if (STORY_BGS.indexOf(storyBg) < 0) storyBg = STORY_BGS[0];
+    $("storyText").value = ""; $("storyError").textContent = "";
+    $("storyNameInput").value = last ? last.name : "";
+    $("storyNameField").style.display = last ? "none" : "block";
+    storyFont = 0; storyTc = "#FFFFFF"; storySize = 9; storyPos = { x: 0.5, y: 0.5 };
+    storyMusic = null; renderMusicChip();
+    storyZoom = 1; storyPan = { x: 0, y: 0 }; storyOvs = []; storySel = -1;
+    rebuildStoryLayers();
+    $("storySize").value = storySize;
+    buildPicker("storyBgRow", STORY_BGS, storyBg, "bg-dot", function (v) { storyBg = v; updateStoryPreview(); }, true);
+    buildPicker("storyTcRow", TEXT_COLORS, storyTc, "bg-dot", function (v) { storyTc = v; updateStoryPreview(); }, true);
+    var fr = $("storyFontRow"); fr.innerHTML = "";
+    STORY_FONTS.forEach(function (f, i) {
+      var el = document.createElement("div"); el.className = "font-pick" + (i === storyFont ? " selected" : "");
+      el.textContent = "Aa"; el.title = f[0]; el.style.fontFamily = f[1]; el.style.fontWeight = f[2];
+      if (i === 9) el.style.fontSize = "12px";
+      el.onclick = function () { storyFont = i; fr.querySelectorAll(".font-pick").forEach(function (x) { x.classList.remove("selected"); }); el.classList.add("selected"); updateStoryPreview(); };
+      fr.appendChild(el);
+    });
+    updateStoryPreview();
+    $("storyModal").classList.add("open");
+    setTimeout(function () { $("storyText").focus(); }, 50);
+  }
+  function closeStoryModal() { stopPreview(); $("storyModal").classList.remove("open"); }
+
+  // ===== MÚSICA PARA LAS STORIES (catálogo de Apple Music: trozos de 30 s) =====
+  var storyMusic = null, previewAudio = null, previewBtn = null, topSongs = null, musicTimer = null, musicReq = 0;
+
+  function stopPreview() {
+    if (previewAudio) { previewAudio.pause(); previewAudio = null; }
+    if (previewBtn) { previewBtn.textContent = "▶"; previewBtn = null; }
+  }
+  function songFromSearch(x) {
+    return x.previewUrl ? { title: x.trackName, artist: x.artistName, art: x.artworkUrl100 || "", url: x.previewUrl } : null;
+  }
+  function songFromChart(e) {
+    var link = (e.link || []).filter(function (l) { return l.attributes && /audio/.test(l.attributes.type || ""); })[0];
+    var imgs = e["im:image"] || [];
+    return link ? { title: e["im:name"].label, artist: e["im:artist"].label, art: imgs.length ? imgs[imgs.length - 1].label : "", url: link.attributes.href } : null;
+  }
+  function loadTopSongs() {
+    if (topSongs) return Promise.resolve(topSongs);
+    return fetch("https://itunes.apple.com/es/rss/topsongs/limit=100/json").then(function (r) { return r.json(); }).then(function (j) {
+      topSongs = ((j.feed && j.feed.entry) || []).map(songFromChart).filter(Boolean);
+      return topSongs;
+    });
+  }
+  function searchSongs(q) {
+    return fetch("https://itunes.apple.com/search?media=music&entity=song&limit=50&country=es&term=" + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (j) { return (j.results || []).map(songFromSearch).filter(Boolean); });
+  }
+
+  function songRow(song, onPick) {
+    var row = document.createElement("div"); row.className = "song-row";
+    row.innerHTML = '<img alt=""><div class="mtxt"><b></b><small></small></div><button class="song-play" aria-label="Escuchar">▶</button>';
+    if (song.art) row.querySelector("img").src = song.art;
+    row.querySelector("b").textContent = song.title;
+    row.querySelector("small").textContent = song.artist;
+    var btn = row.querySelector(".song-play");
+    btn.onclick = function (e) {
+      e.stopPropagation();
+      if (previewBtn === btn) { stopPreview(); return; }
+      stopPreview();
+      previewAudio = new Audio(song.url); previewBtn = btn; btn.textContent = "⏸";
+      previewAudio.onended = stopPreview;
+      previewAudio.play().catch(function () { stopPreview(); toast("No se pudo reproducir la canción"); });
+    };
+    row.onclick = function () { onPick(song); };
+    return row;
+  }
+  function renderSongs(list) {
+    var box = $("musicList"); box.innerHTML = "";
+    if (!list.length) { box.innerHTML = '<div class="empty-state" style="padding:20px">No se ha encontrado ninguna canción.</div>'; return; }
+    list.forEach(function (s) { box.appendChild(songRow(s, pickSong)); });
+  }
+  function musicError() { $("musicList").innerHTML = '<div class="empty-state" style="padding:20px">No se ha podido cargar la música. Revisa tu conexión a internet.</div>'; }
+  function showTopSongs() {
+    $("musicListTitle").textContent = "Lo más escuchado ahora";
+    $("musicList").innerHTML = '<div class="empty-state" style="padding:20px">Cargando canciones…</div>';
+    var req = ++musicReq;
+    loadTopSongs().then(function (l) { if (req === musicReq) renderSongs(l); }, function () { if (req === musicReq) musicError(); });
+  }
+  function openMusicModal() {
+    $("musicSearch").value = "";
+    $("musicModal").classList.add("open");
+    showTopSongs();
+    setTimeout(function () { $("musicSearch").focus(); }, 50);
+  }
+  function closeMusicModal() { stopPreview(); $("musicModal").classList.remove("open"); }
+  function pickSong(song) { storyMusic = song; closeMusicModal(); renderMusicChip(); }
+
+  function renderMusicChip() {
+    var chip = $("storyMusicChip");
+    $("storyMusicBtn").textContent = storyMusic ? "🎵 Cambiar música" : "🎵 Añadir música";
+    if (!storyMusic) { chip.style.display = "none"; chip.innerHTML = ""; return; }
+    chip.style.display = "flex";
+    chip.innerHTML = '<img alt=""><div class="mtxt"><b></b><small></small></div><button class="song-play" aria-label="Escuchar">▶</button><button class="chip-x" aria-label="Quitar música">✕</button>';
+    if (storyMusic.art) chip.querySelector("img").src = storyMusic.art;
+    chip.querySelector("b").textContent = storyMusic.title;
+    chip.querySelector("small").textContent = storyMusic.artist;
+    var play = chip.querySelector(".song-play");
+    play.onclick = function () {
+      if (previewBtn === play) { stopPreview(); return; }
+      stopPreview(); previewAudio = new Audio(storyMusic.url); previewBtn = play; play.textContent = "⏸";
+      previewAudio.onended = stopPreview; previewAudio.play().catch(stopPreview);
+    };
+    chip.querySelector(".chip-x").onclick = function () { stopPreview(); storyMusic = null; renderMusicChip(); };
+  }
+
+  function initMusic() {
+    $("storyMusicBtn").onclick = openMusicModal;
+    $("musicCancelBtn").onclick = closeMusicModal;
+    $("musicModal").onclick = function (e) { if (e.target === $("musicModal")) closeMusicModal(); };
+    $("musicSearch").addEventListener("input", function () {
+      clearTimeout(musicTimer);
+      var q = this.value.trim();
+      musicTimer = setTimeout(function () {
+        if (!q) { showTopSongs(); return; }
+        $("musicListTitle").textContent = "Resultados";
+        $("musicList").innerHTML = '<div class="empty-state" style="padding:20px">Buscando…</div>';
+        var req = ++musicReq;
+        searchSongs(q).then(function (l) { if (req === musicReq) renderSongs(l); }, function () { if (req === musicReq) musicError(); });
+      }, 400);
+    });
+  }
+
+  // Reduce la foto para que quepa en el navegador (square: recorte cuadrado, para fotos de perfil)
+  function shrinkImage(file, cb, square, maxSide) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var w = img.width, h = img.height, c = document.createElement("canvas"), g = c.getContext("2d");
+        if (square) {
+          var side = Math.min(w, h);
+          c.width = c.height = 256;
+          g.drawImage(img, (w - side) / 2, (h - side) / 2, side, side, 0, 0, 256, 256);
+          cb(c.toDataURL("image/jpeg", 0.8));
+          return;
+        }
+        var k = Math.min(1, (maxSide || 1080) / Math.max(w, h));
+        c.width = Math.round(w * k); c.height = Math.round(h * k);
+        g.drawImage(img, 0, 0, c.width, c.height);
+        cb(c.toDataURL("image/jpeg", 0.72));
+      };
+      img.onerror = function () { toast("No se pudo abrir esa foto"); };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function publishStory() {
+    var known = lastMe();
+    var text = $("storyText").value.trim(), name = known ? known.name : $("storyNameInput").value.trim(), err = $("storyError");
+    err.textContent = "";
+    if (!name) { err.textContent = "Escribe tu nombre."; $("storyNameInput").focus(); return; }
+    var d = getDB(), last = lastMe();
+    var user = findOrCreateProfile(d, name, last && last.name.toLowerCase() === name.toLowerCase() ? last.color : null);
+    d.stories.push({ id: rid() + rid(), user_id: user.id, name: user.name, color: user.color, text: text, bg: storyBg, image: storyImage, font: storyFont, tc: storyTc, size: storySize, x: storyPos.x, y: storyPos.y, music: storyMusic, zoom: storyZoom, px: storyPan.x, py: storyPan.y, overlays: storyOvs.slice(), created_at: new Date().toISOString() });
+    if (!saveDB(d)) return;
+    if (!last || last.id !== user.id) { saveJSON("cf_last", user); updateMeLabel(); }
+    closeStoryModal();
+    renderStories();
+    toast("Story publicada");
+    cloud.pushStories();
+    bus.send({ type: "stories", name: user.name });
+  }
+
+  function initStories() {
+    $("newStoryBtn").onclick = openStoryModal;
+    $("storyCancelBtn").onclick = closeStoryModal;
+    $("storyModal").onclick = function (e) { if (e.target === $("storyModal")) closeStoryModal(); };
+    $("storyText").addEventListener("input", updateStoryPreview);
+    $("storyPhotoBtn").onclick = function () { $("storyPhotoFile").click(); };
+    $("storyNoPhotoBtn").onclick = function () { storyImage = null; storyZoom = 1; storyPan = { x: 0, y: 0 }; updateStoryPreview(); rebuildStoryLayers(); };
+    $("storyPhotoFile").onchange = function () {
+      var f = this.files && this.files[0]; this.value = "";
+      if (!f) return;
+      shrinkImage(f, function (url) { storyImage = url; storyZoom = 1; storyPan = { x: 0, y: 0 }; updateStoryPreview(); rebuildStoryLayers(); }, false, 820);
+    };
+
+    // Stickers y emojis en la story
+    var stkPickTab = "emoji";
+    function renderStoryStkPicker() {
+      var tabs = $("storyStkTabs"), grid = $("storyStkGrid");
+      tabs.innerHTML = ""; grid.innerHTML = "";
+      [["fav", "⭐ Favoritos"], ["emoji", "😊 Emojis"], ["mine", "🎨 Mis stickers"]].forEach(function (t) {
+        var b = document.createElement("button"); b.className = "stk-tab" + (stkPickTab === t[0] ? " active" : ""); b.textContent = t[1];
+        b.onclick = function () { stkPickTab = t[0]; renderStoryStkPicker(); };
+        tabs.appendChild(b);
+      });
+      var items = stkPickTab === "fav" ? getFavs()
+        : stkPickTab === "emoji" ? STICKERS.map(function (e) { return { e: e }; })
+        : myStickers().map(function (s) { return s.gif ? { gif: s.gif, img: s.img } : { img: s.img }; });
+      if (!items.length) {
+        grid.innerHTML = '<div class="stk-empty">' + (stkPickTab === "fav" ? "Aún no tienes favoritos." : "Aún no has creado stickers. Créalos desde la bandeja 😊 del chat.") + "</div>";
+        return;
+      }
+      items.forEach(function (item) {
+        var el = document.createElement("div"); el.className = "stk";
+        if (item.e) el.textContent = item.e;
+        else {
+          var im = document.createElement("img"); im.src = item.img; im.alt = ""; el.appendChild(im);
+          if (item.gif) { var bd = document.createElement("span"); bd.className = "gif-badge"; bd.textContent = "GIF"; el.appendChild(bd); }
+        }
+        el.onclick = function () {
+          var ov = item.e ? { t: "e", v: item.e, size: 22 } : item.gif ? { t: "gif", v: item.gif, size: 38 } : { t: "img", v: item.img, size: 38 };
+          var n = storyOvs.length;
+          ov.x = 0.5 + ((n % 3) - 1) * 0.12; ov.y = 0.4 + (n % 4) * 0.08;
+          storyOvs.push(ov); storySel = storyOvs.length - 1;
+          $("storyStkModal").classList.remove("open");
+          rebuildStoryLayers();
+        };
+        grid.appendChild(el);
+      });
+    }
+    $("storyStkBtn").onclick = function () { renderStoryStkPicker(); $("storyStkModal").classList.add("open"); };
+    $("storyStkCancel").onclick = function () { $("storyStkModal").classList.remove("open"); };
+    $("storyStkModal").onclick = function (e) { if (e.target === $("storyStkModal")) $("storyStkModal").classList.remove("open"); };
+    $("storyOvSize").oninput = function () { if (storyOvs[storySel]) { storyOvs[storySel].size = parseFloat(this.value); refreshStoryLayers(); } };
+    $("storyOvDel").onclick = function () { if (storySel >= 0) { storyOvs.splice(storySel, 1); storySel = -1; rebuildStoryLayers(); } };
+    $("storyZoom").oninput = function () { storyZoom = parseFloat(this.value); refreshStoryLayers(); };
+
+    // Arrastrar stickers o la foto dentro de la story
+    var pv = $("storyPreview"), drag = null;
+    pv.addEventListener("pointerdown", function (e) {
+      var ovEl = e.target.closest(".story-ov");
+      var r = pv.getBoundingClientRect();
+      if (ovEl) {
+        storySel = +ovEl.dataset.i;
+        drag = { kind: "ov", i: storySel };
+      } else if (storyImage && !e.target.closest(".story-textbox")) {
+        storySel = -1;
+        drag = { kind: "photo", sx: e.clientX, sy: e.clientY, px: storyPan.x, py: storyPan.y, w: r.width, h: r.height };
+      } else { storySel = -1; refreshStoryLayers(); return; }
+      e.preventDefault();
+      try { pv.setPointerCapture(e.pointerId); } catch (x) {}
+      refreshStoryLayers();
+    });
+    pv.addEventListener("pointermove", function (e) {
+      if (!drag) return;
+      var r = pv.getBoundingClientRect();
+      if (drag.kind === "ov") {
+        var ov = storyOvs[drag.i]; if (!ov) return;
+        ov.x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+        ov.y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+      } else {
+        storyPan.x = drag.px + (e.clientX - drag.sx) / drag.w * 100;
+        storyPan.y = drag.py + (e.clientY - drag.sy) / drag.h * 100;
+      }
+      refreshStoryLayers();
+    });
+    ["pointerup", "pointercancel"].forEach(function (ev) { pv.addEventListener(ev, function () { drag = null; }); });
+    // Rueda del ratón para ampliar la foto
+    pv.addEventListener("wheel", function (e) {
+      if (!storyImage) return;
+      e.preventDefault();
+      storyZoom = Math.min(4, Math.max(1, storyZoom * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
+      refreshStoryLayers();
+    }, { passive: false });
+    $("storyPublishBtn").onclick = publishStory;
+    $("storySize").oninput = function () { storySize = parseFloat(this.value); updateStoryPreview(); };
+
+    // Arrastrar el texto por la story
+    var box = $("storyTextBox"), dragging = false;
+    box.addEventListener("pointerdown", function (e) { dragging = true; e.preventDefault(); e.stopPropagation(); try { box.setPointerCapture(e.pointerId); } catch (x) {} });
+    box.addEventListener("pointermove", function (e) {
+      if (!dragging) return;
+      // Que el texto no se salga del marco
+      var r = $("storyPreview").getBoundingClientRect();
+      var hw = Math.min(0.5, box.offsetWidth / r.width / 2), hh = Math.min(0.5, box.offsetHeight / r.height / 2);
+      storyPos.x = Math.min(1 - hw, Math.max(hw, (e.clientX - r.left) / r.width));
+      storyPos.y = Math.min(1 - hh, Math.max(hh, (e.clientY - r.top) / r.height));
+      updateStoryPreview();
+    });
+    ["pointerup", "pointercancel"].forEach(function (ev) { box.addEventListener(ev, function () { dragging = false; }); });
+
+    initMusic();
+    $("svMute").onclick = function () {
+      svMuted = !svMuted;
+      if (svAudio) svAudio.muted = svMuted;
+      this.textContent = svMuted ? "🔇" : "🔊";
+    };
+    $("svClose").onclick = closeViewer;
+    $("svNext").onclick = function () { stepViewer(1); };
+    $("svPrev").onclick = function () { stepViewer(-1); };
+    $("svDelete").onclick = function () {
+      if (!viewer) return;
+      var s = viewer.groups[viewer.gi].items[viewer.si];
+      clearTimeout(viewer.timer);
+      askConfirm("¿Borrar esta story?", "Borrar", function () {
+        if (!viewer) return;
+        var d = getDB(); d.stories = d.stories.filter(function (x) { return x.id !== s.id; });
+        d.deadStories = d.deadStories || {}; d.deadStories[s.id] = 1;
+        saveDB(d); cloud.pushStories();
+        bus.send({ type: "stories" });
+        toast("Story borrada");
+        var g = viewer.groups[viewer.gi]; g.items.splice(viewer.si, 1);
+        if (!g.items.length) { closeViewer(); return; }
+        if (viewer.si >= g.items.length) viewer.si = g.items.length - 1;
+        showStory();
+      }, function () { if (viewer) showStory(); });
+    };
+    document.addEventListener("keydown", function (e) {
+      if (!viewer) return;
+      if (e.key === "Escape") closeViewer();
+      else if (e.key === "ArrowRight") stepViewer(1);
+      else if (e.key === "ArrowLeft") stepViewer(-1);
+    });
+  }
+
+  function openViewer(groups, gi) {
+    viewer = { groups: groups, gi: gi, si: 0, timer: null };
+    var seen = loadJSON("cf_story_seen", {}), items = groups[gi].items;
+    for (var i = 0; i < items.length; i++) if (!seen[items[i].id]) { viewer.si = i; break; }
+    $("storyViewer").classList.add("open");
+    showStory();
+  }
+  var svAudio = null, svMuted = false;
+  function stopStoryAudio() { if (svAudio) { svAudio.pause(); svAudio = null; } }
+  function closeViewer() {
+    if (!viewer) return;
+    stopStoryAudio();
+    clearTimeout(viewer.timer); viewer = null;
+    $("storyViewer").classList.remove("open");
+    renderStories();
+  }
+  function stepViewer(dir) {
+    if (!viewer) return;
+    var g = viewer.groups[viewer.gi];
+    viewer.si += dir;
+    if (viewer.si >= g.items.length) { viewer.gi++; viewer.si = 0; }
+    else if (viewer.si < 0) { viewer.gi--; viewer.si = viewer.gi >= 0 ? viewer.groups[viewer.gi].items.length - 1 : 0; }
+    if (viewer.gi < 0 || viewer.gi >= viewer.groups.length) { closeViewer(); return; }
+    showStory();
+  }
+  function showStory() {
+    var g = viewer.groups[viewer.gi], s = g.items[viewer.si], dur = s.music ? 15000 : s.image ? 6000 : 5000;
+    clearTimeout(viewer.timer);
+    stopStoryAudio();
+    var mus = $("svMusic");
+    $("svMute").style.display = s.music ? "" : "none";
+    $("svMute").textContent = svMuted ? "🔇" : "🔊";
+    if (s.music) {
+      mus.style.display = "flex";
+      mus.innerHTML = '<img alt=""><span></span>';
+      if (s.music.art) mus.querySelector("img").src = s.music.art; else mus.querySelector("img").remove();
+      mus.querySelector("span").textContent = "🎵 " + s.music.title + " · " + s.music.artist;
+      svAudio = new Audio(s.music.url); svAudio.muted = svMuted;
+      svAudio.play().catch(function () {});
+    } else { mus.style.display = "none"; }
+    var seen = loadJSON("cf_story_seen", {}); seen[s.id] = true;
+    var live = {}; liveStories().forEach(function (x) { live[x.id] = true; });
+    Object.keys(seen).forEach(function (k) { if (!live[k]) delete seen[k]; });
+    saveJSON("cf_story_seen", seen);
+
+    var frame = $("svFrame");
+    frame.innerHTML = "";
+    frame.style.backgroundColor = s.image ? "#000" : (s.bg || g.color);
+    frame.style.backgroundImage = "none";
+    renderStoryLayers(frame, s);
+    if (s.text) {
+      var t = document.createElement("div"); t.className = "story-textbox"; t.textContent = s.text;
+      renderStoryText(t, s); frame.appendChild(t);
+    }
+    paintAvatar($("svAvatar"), g.user_id, g.name, g.color);
+    $("svName").textContent = g.name; $("svWhen").textContent = fmtAgo(s.created_at);
+    $("svDelete").style.display = myIds()[s.user_id] ? "" : "none";
+
+    var bars = $("svBars"); bars.innerHTML = "";
+    g.items.forEach(function (x, i) {
+      var b = document.createElement("div"); b.className = "sv-bar";
+      var fill = document.createElement("i");
+      if (i < viewer.si) fill.style.width = "100%";
+      b.appendChild(fill); bars.appendChild(b);
+      if (i === viewer.si) {
+        fill.style.transition = "none"; fill.style.width = "0";
+        requestAnimationFrame(function () { requestAnimationFrame(function () { fill.style.transition = "width " + dur + "ms linear"; fill.style.width = "100%"; }); });
+      }
+    });
+    viewer.timer = setTimeout(function () { stepViewer(1); }, dur);
+  }
+
+  // ===== LLAMADAS Y VIDEOLLAMADAS =====
+  var peers = {}, call = null, ringTimer = null, audioCtx = null;
+
+  function callIdentity() { return me || lastMe(); }
+  function announce() { var who = callIdentity(); if (who) bus.send({ type: "here", uid: who.id, name: who.name, color: who.color }); }
+
+  function renderPeers() {
+    var box = $("peersList"), now = Date.now(), ids = [];
+    Object.keys(peers).forEach(function (k) { if (now - peers[k].seen > 10000) delete peers[k]; else ids.push(k); });
+    if (!ids.length) {
+      box.innerHTML = '<div class="info-card"><b>Ahora mismo no hay nadie más conectado.</b><br>Cuando alguien tenga la app abierta, aparecerá aquí para llamarle con 📞 o 🎥.</div>';
+      return;
+    }
+    box.innerHTML = "";
+    ids.forEach(function (k) {
+      var p = peers[k];
+      var row = document.createElement("div"); row.className = "person-row";
+      row.innerHTML = '<div class="avatar-dot"></div>' +
+        '<div class="pname"></div><button class="call-action" aria-label="Llamar">📞</button><button class="call-action video" aria-label="Videollamada">🎥</button>';
+      paintAvatar(row.querySelector(".avatar-dot"), p.uid, p.name, p.color);
+      row.querySelector(".pname").innerHTML = escapeHtml(p.name) + "<small>En línea</small>";
+      var b = row.querySelectorAll("button");
+      b[0].onclick = function () { startCall(k, false); };
+      b[1].onclick = function () { startCall(k, true); };
+      box.appendChild(row);
+    });
+  }
+
+  function renderCallLog() {
+    var box = $("callLog"), log = loadJSON("cf_calls", []);
+    if (!log.length) { box.innerHTML = '<div class="empty-state" style="padding:14px">Aún no hay llamadas.</div>'; return; }
+    box.innerHTML = "";
+    log.slice().reverse().slice(0, 30).forEach(function (c) {
+      var d = new Date(c.at), row = document.createElement("div"); row.className = "log-row";
+      var detail = c.dur ? " · " + fmtDur(c.dur) : (c.dir === "in" ? ' · <span class="missed">perdida</span>' : " · sin respuesta");
+      row.innerHTML = "<span>" + (c.dir === "out" ? "↗️" : "↙️") + "</span><span>" + (c.video ? "🎥 " : "📞 ") + escapeHtml(c.with) + detail + '</span><span class="when">' + d.toLocaleDateString() + " " + fmtTime(c.at) + "</span>";
+      box.appendChild(row);
+    });
+  }
+  function logCall(c) {
+    var log = loadJSON("cf_calls", []);
+    log.push({ with: c.peerName, video: c.video, dir: c.role === "caller" ? "out" : "in", dur: c.connectedAt ? Math.round((Date.now() - c.connectedAt) / 1000) : 0, at: new Date().toISOString() });
+    if (log.length > 100) log = log.slice(log.length - 100);
+    saveJSON("cf_calls", log); renderCallLog();
+  }
+
+  function startRing() {
+    try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    function beep() {
+      try {
+        var t = audioCtx.currentTime, o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.frequency.value = 620; o.connect(g); g.connect(audioCtx.destination);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9); o.start(t); o.stop(t + 1);
+      } catch (e) {}
+    }
+    beep(); ringTimer = setInterval(beep, 2000);
+    if (navigator.vibrate) try { navigator.vibrate([300, 200, 300]); } catch (e) {}
+  }
+  function stopRing() { clearInterval(ringTimer); ringTimer = null; }
+
+  function getMedia(video) {
+    var md = navigator.mediaDevices;
+    if (!md || !md.getUserMedia) return Promise.resolve(null);
+    return md.getUserMedia({ audio: true, video: video ? { facingMode: "user" } : false })
+      .catch(function () {
+        if (!video) return Promise.reject();
+        return md.getUserMedia({ video: { facingMode: "user" } }).catch(function () { return md.getUserMedia({ audio: true }); });
+      })
+      .catch(function () { return null; });
+  }
+
+  function overlayMode(mode, status) {
+    var ov = $("callOverlay");
+    ov.className = "call-overlay open " + mode + (call && call.stream && call.stream.getVideoTracks().length ? " has-local" : "") + (call && call.remoteVideo ? " has-remote-video" : "");
+    if (status !== undefined) $("callStatus").textContent = status;
+    $("camBtn").style.display = call && call.video ? "flex" : "none";
+  }
+  function fillOverlayPerson(name, color, uid) {
+    $("callName").textContent = name;
+    paintAvatar($("callAvatar"), uid, name, color);
+  }
+  function showLocal(stream) {
+    var lv = $("localVideo");
+    lv.srcObject = stream && stream.getVideoTracks().length ? stream : null;
+    $("callOverlay").classList.toggle("has-local", !!lv.srcObject);
+    if (lv.srcObject) lv.play().catch(function () {});
+    $("muteBtn").classList.remove("off"); $("muteBtn").textContent = "🎤"; $("camBtn").classList.remove("off");
+  }
+  function startTimer() {
+    call.connectedAt = Date.now();
+    clearInterval(call.timer);
+    call.timer = setInterval(function () {
+      if (call && call.connectedAt) $("callStatus").textContent = (call.video ? "Videollamada" : "Llamada") + " · " + fmtDur(Math.round((Date.now() - call.connectedAt) / 1000));
+    }, 1000);
+  }
+
+  function setupPc(c) {
+    // Servidores STUN públicos: ayudan a que dos aparatos en redes distintas se encuentren
+    var pc = new RTCPeerConnection({ iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] });
+    pc.onicecandidate = function (e) { if (e.candidate) bus.send({ type: "ice", to: c.peer, callId: c.id, cand: e.candidate.toJSON() }); };
+    pc.ontrack = function (e) {
+      var rv = $("remoteVideo");
+      var stream = e.streams && e.streams[0];
+      if (!stream) { stream = rv.srcObject || new MediaStream(); stream.addTrack(e.track); }
+      if (rv.srcObject !== stream) rv.srcObject = stream;
+      rv.play().catch(function () {});
+      if (e.track.kind === "video") { c.remoteVideo = true; $("callOverlay").classList.add("has-remote-video"); }
+    };
+    pc.onconnectionstatechange = function () {
+      if (!call || call.pc !== pc) return;
+      if (pc.connectionState === "connected" && !call.connectedAt) { overlayMode("connected", ""); startTimer(); }
+      if (pc.connectionState === "failed") { bus.send({ type: "end", to: c.peer, callId: c.id }); endCall("Se perdió la conexión"); }
+    };
+    c.pc = pc;
+    return pc;
+  }
+  function plainDesc(d) { return { type: d.type, sdp: d.sdp }; }
+  function flushIce() {
+    if (!call || !call.pc) return;
+    var q = call.iceQueue; call.iceQueue = [];
+    q.forEach(function (cand) { call.pc.addIceCandidate(cand).catch(function () {}); });
+  }
+  function noMediaToast(stream) { if (!stream) toast("Sin permiso de cámara/micro: podrás ver y oír, pero no te verán"); }
+
+  function startCall(peerKey, video) {
+    if (call) return;
+    var p = peers[peerKey], who = callIdentity(); if (!p) return;
+    if (!who) { toast("Entra primero en un chat para que sepan quién llama"); return; }
+    if (!window.RTCPeerConnection) { toast("Este navegador no permite llamadas"); return; }
+    var c = call = { id: rid() + rid(), peer: peerKey, peerName: p.name, peerColor: p.color, video: video, role: "caller", iceQueue: [] };
+    fillOverlayPerson(p.name, p.color, p.uid);
+    overlayMode("ringing", video ? "Videollamando…" : "Llamando…");
+    getMedia(video).then(function (stream) {
+      if (call !== c) { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); return; }
+      c.stream = stream; showLocal(stream); noMediaToast(stream);
+      var pc = setupPc(c), kinds = {};
+      if (stream) stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); kinds[t.kind] = true; });
+      if (!kinds.audio) pc.addTransceiver("audio", { direction: "recvonly" });
+      if (video && !kinds.video) pc.addTransceiver("video", { direction: "recvonly" });
+      return pc.createOffer().then(function (o) { return pc.setLocalDescription(o); }).then(function () {
+        if (call !== c) return;
+        bus.send({ type: "offer", to: peerKey, callId: c.id, sdp: plainDesc(pc.localDescription), video: video, uid: who.id, name: who.name, color: who.color });
+      });
+    }).catch(function () { if (call === c) endCall("No se pudo iniciar la llamada"); });
+    c.timeout = setTimeout(function () {
+      if (call === c && !c.answered) { bus.send({ type: "end", to: peerKey, callId: c.id }); endCall("No contesta"); }
+    }, 35000);
+  }
+
+  function onIncomingOffer(m) {
+    if (call) { bus.send({ type: "busy", to: m.from, callId: m.callId }); return; }
+    var c = call = { id: m.callId, peer: m.from, peerName: m.name, peerColor: m.color, video: m.video, role: "callee", offer: m.sdp, iceQueue: [] };
+    fillOverlayPerson(m.name, m.color, m.uid);
+    overlayMode("incoming ringing", m.video ? "🎥 Te está videollamando" : "📞 Te está llamando");
+    startRing();
+    c.timeout = setTimeout(function () { if (call === c && !c.answered) endCall("Llamada perdida"); }, 35000);
+  }
+
+  function acceptCall() {
+    var c = call; if (!c || c.role !== "callee" || c.answered) return;
+    c.answered = true; stopRing(); clearTimeout(c.timeout);
+    overlayMode("connecting", "Conectando…");
+    getMedia(c.video).then(function (stream) {
+      if (call !== c) { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); return; }
+      c.stream = stream; showLocal(stream); overlayMode("connecting"); noMediaToast(stream);
+      var pc = setupPc(c);
+      return pc.setRemoteDescription(c.offer).then(function () {
+        if (stream) stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
+        flushIce();
+        return pc.createAnswer();
+      }).then(function (a) { return pc.setLocalDescription(a); }).then(function () {
+        if (call !== c) return;
+        bus.send({ type: "answer", to: c.peer, callId: c.id, sdp: plainDesc(pc.localDescription) });
+      });
+    }).catch(function () { if (call === c) { bus.send({ type: "end", to: c.peer, callId: c.id }); endCall("No se pudo conectar"); } });
+  }
+
+  function hangUp() {
+    if (!call) return;
+    bus.send({ type: call.role === "callee" && !call.answered ? "reject" : "end", to: call.peer, callId: call.id });
+    endCall("Llamada finalizada");
+  }
+
+  function endCall(reason) {
+    if (!call) return;
+    var c = call; call = null;
+    clearTimeout(c.timeout); clearInterval(c.timer); stopRing();
+    if (c.pc) try { c.pc.close(); } catch (e) {}
+    if (c.stream) c.stream.getTracks().forEach(function (t) { t.stop(); });
+    logCall(c);
+    var ov = $("callOverlay");
+    ov.className = "call-overlay open ended";
+    $("callStatus").textContent = reason;
+    $("remoteVideo").srcObject = null; $("localVideo").srcObject = null;
+    setTimeout(function () { if (!call) ov.className = "call-overlay"; }, 1600);
+  }
+
+  function onCallMessage(m) {
+    if (m.type === "offer") { onIncomingOffer(m); return; }
+    if (!call || m.callId !== call.id) return;
+    if (m.type === "answer" && call.role === "caller") {
+      call.answered = true; clearTimeout(call.timeout);
+      overlayMode("connecting", "Conectando…");
+      call.pc.setRemoteDescription(m.sdp).then(flushIce).catch(function () {});
+    } else if (m.type === "ice") {
+      if (call.pc && call.pc.remoteDescription) call.pc.addIceCandidate(m.cand).catch(function () {});
+      else call.iceQueue.push(m.cand);
+    } else if (m.type === "reject") endCall("Ha rechazado la llamada");
+    else if (m.type === "busy") endCall("Está en otra llamada");
+    else if (m.type === "end") endCall(call.role === "callee" && !call.answered ? "Llamada perdida" : "Llamada finalizada");
+  }
+
+  function initCalls() {
+    renderPeers();
+    setInterval(announce, 4000);
+    setInterval(renderPeers, 3000);
+    $("hangBtn").onclick = hangUp;
+    $("rejectBtn").onclick = hangUp;
+    $("acceptBtn").onclick = acceptCall;
+    $("muteBtn").onclick = function () {
+      if (!call || !call.stream) return;
+      var tracks = call.stream.getAudioTracks(); if (!tracks.length) return;
+      var on = !tracks[0].enabled; tracks.forEach(function (t) { t.enabled = on; });
+      this.classList.toggle("off", !on); this.textContent = on ? "🎤" : "🔇";
+    };
+    $("camBtn").onclick = function () {
+      if (!call || !call.stream) return;
+      var tracks = call.stream.getVideoTracks(); if (!tracks.length) return;
+      var on = !tracks[0].enabled; tracks.forEach(function (t) { t.enabled = on; });
+      this.classList.toggle("off", !on);
+      $("callOverlay").classList.toggle("has-local", on);
+    };
+    window.addEventListener("beforeunload", function () {
+      if (call) bus.send({ type: "end", to: call.peer, callId: call.id });
+      bus.send({ type: "bye" });
+    });
+  }
+
+  // ===== LO QUE LLEGA DE OTRAS PESTAÑAS =====
+  bus.on(function (m) {
+    switch (m.type) {
+      case "hello": if (booted) announce(); break;
+      case "here":
+        var isNew = !peers[m.from];
+        peers[m.from] = { uid: m.uid, name: m.name, color: m.color, seen: Date.now() };
+        if (isNew && booted) renderPeers();
+        break;
+      case "bye":
+        delete peers[m.from]; if (booted) renderPeers();
+        if (call && call.peer === m.from) endCall("Se cortó la llamada");
+        break;
+      case "msg": case "msgdel":
+        if (!booted || !identityFor(m.chatId)) break;
+        if (m.chatId === currentChat) { renderAllMessages(); if (activeTab() === "chatTab") markSeen(); }
+        else if (!currentChat) renderChatsHome();
+        else if (m.type === "msg") { var c = chatById(m.chatId); if (c) toast("💬 " + m.name + " en " + c.name); }
+        if (m.type === "msg") flagTab("chatTab");
+        break;
+      case "chats":
+        if (m.deleted) forgetChat(m.deleted);
+        if (!booted) { if (getMine().length) boot(); break; }
+        if (currentChat && !chatById(currentChat)) toast("Este chat se ha borrado");
+        afterMineChanged();
+        if (currentChat && activeTab() === "chatTab") $("groupNameLabel").textContent = chatTitle();
+        break;
+      case "profile":
+        if (!booted) break;
+        if (currentChat) me = identityFor(currentChat);
+        refreshAvatars(); renderChatsHome(); announce();
+        break;
+      case "stories":
+        if (!booted) break;
+        renderStories();
+        if (m.name) flagTab("storyTab");
+        break;
+      case "stroke-start": case "stroke-pt": case "stroke-pts": case "stroke-end": case "stroke-undo": case "stroke-clear":
+        onDrawMessage(m); break;
+      default: if (booted) onCallMessage(m);
+    }
+  });
+
+  // ===== AJUSTES =====
+  function renderProfile() {
+    var who = me || lastMe();
+    $("profileBtns").style.display = who ? "flex" : "none";
+    $("profileNameEdit").style.display = who ? "flex" : "none";
+    $("profileNameInput").value = who ? who.name : "";
+    $("profileNameError").textContent = "";
+    $("profileAvatar").style.display = who ? "" : "none";
+    $("profileName").textContent = who ? who.name : "";
+    $("profileHint").textContent = who ? "Tu foto sale en tus mensajes, tus stories y las llamadas." : "Entra en un chat para poder ponerte foto.";
+    if (!who) return;
+    paintAvatar($("profileAvatar"), who.id, who.name, who.color);
+    $("profileNoPhotoBtn").style.display = profilePhoto(who.id) ? "" : "none";
+  }
+
+  function setProfilePhoto(photo) {
+    var who = me || lastMe(); if (!who) return;
+    var d = getDB(), p = d.profiles.filter(function (x) { return x.id === who.id; })[0];
+    if (!p) return;
+    if (photo) p.photo = photo; else delete p.photo;
+    if (!saveDB(d)) return;
+    renderProfile(); refreshAvatars();
+    toast(photo ? "Foto de perfil cambiada" : "Foto quitada");
+    cloud.publishAll();
+    bus.send({ type: "profile" });
+  }
+
+  // Cambia el nombre en todas partes: perfil, mis chats, mensajes y stories
+  function renameMe() {
+    var who = me || lastMe(); if (!who) return;
+    var name = $("profileNameInput").value.trim(), err = $("profileNameError");
+    err.textContent = "";
+    if (!name) { err.textContent = "Escribe tu nombre."; return; }
+    if (name === who.name) return;
+    var d = getDB();
+    if (d.profiles.some(function (p) { return p.id !== who.id && p.name.toLowerCase() === name.toLowerCase(); })) {
+      err.textContent = "Ese nombre ya lo usa otra persona. Elige otro."; return;
+    }
+    d.profiles.forEach(function (p) { if (p.id === who.id) p.name = name; });
+    d.messages.forEach(function (m) { if (m.user_id === who.id) m.name = name; });
+    d.stories.forEach(function (s) { if (s.user_id === who.id) s.name = name; });
+    if (!saveDB(d)) return;
+    saveMine(getMine().map(function (m) { if (m.user.id === who.id) m.user.name = name; return m; }));
+    var last = lastMe(); if (last && last.id === who.id) { last.name = name; saveJSON("cf_last", last); }
+    if (me && me.id === who.id) me.name = name;
+    renderProfile(); refreshAvatars(); renderChatsHome(); announce();
+    toast("Ahora te llamas " + name);
+    cloud.publishAll();
+    bus.send({ type: "profile" });
+  }
+
+  function refreshAvatars() {
+    updateMeLabel();
+    if (currentChat) renderAllMessages();
+    renderStories(); renderPeers();
+  }
+
+  function initSettings() {
+    var row = $("themeRow");
+    THEMES.forEach(function (t) {
+      var sw = document.createElement("div"); sw.className = "theme-swatch" + (t === theme ? " selected" : ""); sw.style.background = THEME_PREVIEW[t];
+      sw.onclick = function () {
+        theme = t; document.documentElement.setAttribute("data-theme", t); localStorage.setItem("cf_theme", t);
+        row.querySelectorAll(".theme-swatch").forEach(function (x) { x.classList.remove("selected"); }); sw.classList.add("selected");
+      };
+      row.appendChild(sw);
+    });
+    $("settingsBtn").onclick = function () { renderProfile(); $("settingsModal").classList.add("open"); };
+
+    $("profilePhotoBtn").onclick = function () { $("profilePhotoFile").click(); };
+    $("profileNoPhotoBtn").onclick = function () { setProfilePhoto(null); };
+    $("profileNameSave").onclick = renameMe;
+    $("profileNameInput").addEventListener("keydown", function (e) { if (e.key === "Enter") renameMe(); });
+    $("profilePhotoFile").onchange = function () {
+      var f = this.files && this.files[0]; this.value = "";
+      if (f) shrinkImage(f, setProfilePhoto, true);
+    };
+    $("closeSettingsBtn").onclick = function () { $("settingsModal").classList.remove("open"); };
+    $("settingsModal").onclick = function (e) { if (e.target === $("settingsModal")) $("settingsModal").classList.remove("open"); };
+
+    $("logoutBtn").onclick = function () {
+      askConfirm("¿Cerrar sesión? Tus chats desaparecen de este aparato, pero no se borran: podrás volver a entrar con el nombre del chat, tu nombre y la contraseña.", "Cerrar sesión", function () {
+        $("settingsModal").classList.remove("open");
+        if (call) hangUp();
+        bus.send({ type: "bye" });
+        saveMine([]);
+        try { localStorage.removeItem("cf_last"); } catch (e) {}
+        closeChat();
+        showScreen("welcomeScreen");
+        bus.send({ type: "chats" });
+      }, null, true);
+    };
+
+    $("exportBtn").onclick = function () {
+      var data = JSON.stringify({ app: "chat-familiar", version: 2, db: getDB(), mine: getMine() });
+      downloadFile("chat-familiar-" + new Date().toISOString().slice(0, 10) + ".json", data, "Copia guardada");
+    };
+    $("importBtn").onclick = function () { $("importFile").click(); };
+    $("importFile").onchange = function () {
+      var file = this.files && this.files[0]; this.value = "";
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var x;
+        try { x = JSON.parse(reader.result); } catch (e) { toast("Ese archivo no es una copia válida"); return; }
+        if (!x || x.app !== "chat-familiar" || !x.db || !Array.isArray(x.db.chats)) { toast("Ese archivo no es una copia de Chat Familiar"); return; }
+        askConfirm("¿Cargar esta copia? Se sustituirá todo lo que hay ahora en este aparato.", "Cargar", function () {
+          if (!saveJSON("cf_db", x.db)) { toast("La copia es demasiado grande para este navegador"); return; }
+          saveMine(Array.isArray(x.mine) ? x.mine : []);
+          location.reload();
+        }, null, true);
+      };
+      reader.readAsText(file);
+    };
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>
