@@ -200,6 +200,13 @@
   .loading { margin:auto; color:var(--text-soft); font-size:15px; text-align:center; line-height:1.6; padding:20px; }
   .loading .big { font-size:40px; display:block; margin-bottom:6px; }
   .avatar-dot { background-size:cover; background-position:center; }
+  .member-row { display:flex; align-items:center; gap:12px; padding:8px 4px; border-bottom:1px solid var(--border); }
+  .member-row:last-child { border-bottom:none; }
+  .member-avatar { width:40px; height:40px; font-size:16px; }
+  .member-info { flex:1; min-width:0; }
+  .member-name { font-weight:600; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .member-info small { display:block; color:var(--text-soft); font-size:12px; margin-top:2px; }
+  #chatMembersList { max-height:260px; overflow-y:auto; background:var(--bg); border-radius:12px; padding:2px 10px; }
   @media (max-width:420px) {
     .chat-input-row { gap:5px; padding:10px 8px; }
     .chat-input-row .round-btn { width:35px; height:35px; font-size:16px; }
@@ -462,6 +469,7 @@
       <div class="field"><label id="chatPassLabel">Contraseña del chat</label><input type="password" id="chatPassInput" maxlength="40" autocomplete="new-password"></div>
       <div class="field" id="userColorField"><label>Tu color</label><div class="swatch-row" id="colorSwatchRow"></div></div>
       <div class="field" id="chatEmojiField"><label>Icono del chat</label><div class="swatch-row" id="chatEmojiRow"></div></div>
+      <div class="field" id="chatMembersField" style="display:none;"><label id="chatMembersLabel">Personas en el chat</label><div id="chatMembersList"></div></div>
       <button class="btn-primary" id="chatSaveBtn">Crear chat</button>
       <div class="error-msg" id="chatError"></div>
       <button class="link-btn" id="chatDeleteBtn" style="color:#C0392B; display:none; margin-top:6px;">🗑️ Borrar este chat</button>
@@ -634,7 +642,7 @@
   var CHAT_EMOJIS = ["💬","❤️","🏠","🎉","🐶","⚽","🌈","🍕","✈️","🎮","📚","🌟"];
   var STORY_HOURS = 24;
   // Cambia en cada versión nueva: así la app sabe si en GitHub hay una más reciente y se actualiza sola
-  var APP_VERSION = "2026-10-22.2";
+  var APP_VERSION = "2026-10-22.4";
 
   var $ = function (id) { return document.getElementById(id); };
   function loadJSON(k, fallback) { try { var v = JSON.parse(localStorage.getItem(k)); return v === null || v === undefined ? fallback : v; } catch (e) { return fallback; } }
@@ -812,7 +820,11 @@
       try {
         client = mqtt.connect(BROKER, { clientId: "cf_" + rid() + rid(), keepalive: 30, reconnectPeriod: 3000, connectTimeout: 10000, clean: true });
       } catch (e) { client = null; status(); return; }
-      client.on("connect", function () { connected = true; Object.keys(subs).forEach(subscribeAll); status(); });
+      client.on("connect", function () {
+        connected = true; Object.keys(subs).forEach(subscribeAll); status();
+        // Nada más conectarse se pregunta quién está, para que aparezcan ya en Llamadas
+        setTimeout(function () { if (booted) { bus.send({ type: "hello" }); announce(); } }, 400);
+      });
       client.on("close", function () { connected = false; status(); });
       client.on("offline", function () { connected = false; status(); });
       client.on("error", function () {});
@@ -828,7 +840,14 @@
         if (c && identityFor(c.id)) { received[base] = 1; publishNow(c.id); }
       }, 4000);
     }
-    function watch(base) { if (!base || subs[base]) return; subs[base] = 1; if (client && connected) subscribeAll(base); }
+    function watch(base) {
+      if (!base || subs[base]) return;
+      subs[base] = 1;
+      if (client && connected) {
+        subscribeAll(base);
+        setTimeout(function () { if (booted) { bus.send({ type: "hello" }); announce(); } }, 400);
+      }
+    }
     function sync() {
       var want = {}; myBases().forEach(function (b) { want[b] = 1; });
       Object.keys(subs).forEach(function (b) {
@@ -1051,6 +1070,7 @@
       saveDB(d);
       if (needPublish) changed(c.id);
       if (!booted || !identityFor(c.id)) return;
+      refreshMembersIfOpen();
       if (currentChat === c.id) {
         renderAllMessages(); reloadStrokes(); redrawAll();
         $("groupNameLabel").textContent = chatTitle();
@@ -1210,6 +1230,7 @@
         if (inChat) { requestAnimationFrame(resizeCanvas); var l = $("chatList"); l.scrollTop = l.scrollHeight; markSeen(); }
         else if (tab === "chatTab") renderChatsHome();
         else if (tab === "storyTab") renderStories();
+        else if (tab === "callsTab") { renderPeers(); bus.send({ type: "hello" }); announce(); }
       };
     });
   }
@@ -1350,6 +1371,8 @@
     $("userColorField").style.display = askName ? "block" : "none";
     $("chatEmojiField").style.display = mode === "join" ? "none" : "block";
     $("chatDeleteBtn").style.display = mode === "edit" ? "" : "none";
+    $("chatMembersField").style.display = mode === "edit" ? "block" : "none";
+    if (mode === "edit" && chat) { renderChatMembers(chat); bus.send({ type: "hello" }); }
     if (chat) $("chatDeleteBtn").textContent = isOwner(chat) ? "🗑️ Borrar este chat" : "🚪 Salir de este chat";
     $("chatNameInput").value = chat ? chat.name : "";
     $("userNameInput").value = last ? last.name : "";
@@ -1361,6 +1384,40 @@
     setTimeout(function () { $("chatNameInput").focus(); }, 50);
   }
   function closeChatModal() { $("chatModal").classList.remove("open"); }
+
+  function refreshMembersIfOpen() {
+    if (chatMode === "edit" && editingChat && $("chatModal").classList.contains("open")) renderChatMembers(editingChat);
+  }
+
+  // Lista de las personas que hay en el chat (en la ventana de editar)
+  function renderChatMembers(chat) {
+    var d = getDB(), mine = identityFor(chat.id), online = {};
+    Object.keys(peers).forEach(function (k) { online[peers[k].uid] = 1; });
+    if (mine) online[mine.id] = 1;
+    var ids = {}; d.chat_members.forEach(function (m) { if (m.chat_id === chat.id) ids[m.user_id] = 1; });
+    var people = d.profiles.filter(function (p) { return ids[p.id]; });
+    // Primero tú, luego quien creó el chat, luego los demás por nombre
+    people.sort(function (a, b) {
+      function rank(p) { return mine && p.id === mine.id ? 0 : p.id === chat.created_by ? 1 : 2; }
+      return rank(a) - rank(b) || a.name.localeCompare(b.name);
+    });
+    $("chatMembersLabel").textContent = "Personas en el chat (" + people.length + ")";
+    var box = $("chatMembersList"); box.innerHTML = "";
+    people.forEach(function (p) {
+      var row = document.createElement("div"); row.className = "member-row";
+      var dot = document.createElement("div"); dot.className = "avatar-dot member-avatar"; paintAvatar(dot, p.id, p.name, p.color, d);
+      var info = document.createElement("div"); info.className = "member-info";
+      var nm = document.createElement("div"); nm.className = "member-name"; nm.textContent = p.name + (mine && p.id === mine.id ? " (tú)" : "");
+      var tags = [];
+      if (p.id === chat.created_by) tags.push("👑 Creó el chat");
+      tags.push(online[p.id] ? "🟢 Conectado ahora" : "Desconectado");
+      var sm = document.createElement("small"); sm.textContent = tags.join(" · ");
+      info.appendChild(nm); info.appendChild(sm);
+      row.appendChild(dot); row.appendChild(info);
+      box.appendChild(row);
+    });
+    if (!people.length) box.innerHTML = '<div class="hint">Todavía no hay nadie más.</div>';
+  }
 
   function enterChat(chatId, user) {
     var mine = getMine().filter(function (m) { return m.chat !== chatId; });
@@ -3119,7 +3176,7 @@
       case "here":
         var isNew = !peers[m.from];
         peers[m.from] = { uid: m.uid, name: m.name, color: m.color, seen: Date.now() };
-        if (isNew && booted) renderPeers();
+        if (isNew && booted) { renderPeers(); refreshMembersIfOpen(); }
         break;
       case "bye":
         delete peers[m.from]; if (booted) renderPeers();
