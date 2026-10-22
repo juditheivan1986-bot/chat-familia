@@ -633,6 +633,8 @@
   var STICKERS = ["😂","🤣","😊","😍","🥰","😘","😎","🤩","🥳","😇","🙂","😉","😋","😜","🤪","🤗","🤔","🤭","😴","😢","😭","🥺","😮","😱","😡","🤯","🙄","😅","👍","👏","🙏","💪","👋","🤝","❤️","💕","💯","🔥","🌟","✨","🎉","🎂","🎁","🍕","☕","🐶","🐱","🌈","☀️","⚽"];
   var CHAT_EMOJIS = ["💬","❤️","🏠","🎉","🐶","⚽","🌈","🍕","✈️","🎮","📚","🌟"];
   var STORY_HOURS = 24;
+  // Cambia en cada versión nueva: así la app sabe si en GitHub hay una más reciente y se actualiza sola
+  var APP_VERSION = "2026-10-22.2";
 
   var $ = function (id) { return document.getElementById(id); };
   function loadJSON(k, fallback) { try { var v = JSON.parse(localStorage.getItem(k)); return v === null || v === undefined ? fallback : v; } catch (e) { return fallback; } }
@@ -779,7 +781,7 @@
     var LIVE = { here: 1, hello: 1, bye: 1, offer: 1, answer: 1, ice: 1, reject: 1, busy: 1, end: 1,
                  "stroke-start": 1, "stroke-pts": 1, "stroke-end": 1, "stroke-undo": 1, "stroke-clear": 1, profile: 1 };
     var MAX_MEDIA = 1400000, MAX_MSGS = 300, MAX_STROKES = 400;
-    var client = null, connected = false, subs = {}, waiters = {}, timers = {}, storyCache = {}, pendingMedia = {};
+    var client = null, connected = false, subs = {}, waiters = {}, timers = {}, storyCache = {}, pendingMedia = {}, storyFix = {};
 
     function topicFor(name, pass) { return sha256hex("cfam|" + name.trim().toLowerCase() + "|" + pass).then(function (h) { return ROOT + h.slice(0, 40); }); }
     function chatOf(base, d) { return (d || getDB()).chats.filter(function (c) { return c.topic === base; })[0] || null; }
@@ -992,8 +994,8 @@
       else if ((c.clearedAt || 0) > (st.clearedAt || 0)) needPublish = true;
 
       // Personas y miembros
-      var memberSet = {};
-      d.chat_members.forEach(function (m) { if (m.chat_id === c.id) memberSet[m.user_id] = 1; });
+      var memberSet = {}, beforeMembers = {};
+      d.chat_members.forEach(function (m) { if (m.chat_id === c.id) { memberSet[m.user_id] = 1; beforeMembers[m.user_id] = 1; } });
       (st.members || []).forEach(function (p) {
         var lp = d.profiles.filter(function (x) { return x.id === p.id; })[0];
         if (lp) { lp.name = p.name; lp.color = p.color; if (p.photo) lp.photo = p.photo; else delete lp.photo; }
@@ -1002,6 +1004,12 @@
       });
       var remoteMembers = {}; (st.members || []).forEach(function (p) { remoteMembers[p.id] = 1; });
       if (Object.keys(memberSet).some(function (id) { return !remoteMembers[id]; })) needPublish = true;
+      // Ha entrado alguien nuevo: se le vuelven a mandar las stories para que vea también las de antes
+      var newcomer = (st.members || []).some(function (p) { return !beforeMembers[p.id]; });
+      if (newcomer && identityFor(c.id) && received[base]) {
+        clearTimeout(storyFix[base]);
+        storyFix[base] = setTimeout(function () { publishStories(base); }, 800 + Math.random() * 1500);
+      }
 
       // Mensajes
       var have = {}, newFromOthers = 0, lastName = "";
@@ -1055,12 +1063,19 @@
     }
 
     // ---- stories: cada uno aporta las suyas; se juntan en cada chat ----
+    // Stories que este aparato conoce de la gente de ese chat (las suyas y las de los demás miembros)
+    function storiesForBase(base, d) {
+      var c = chatOf(base, d), members = {}, mineIds = myIds();
+      if (c) d.chat_members.forEach(function (m) { if (m.chat_id === c.id) members[m.user_id] = 1; });
+      return liveStories(d).filter(function (s) { return members[s.user_id] || mineIds[s.user_id]; });
+    }
     function publishStories(base) {
       if (!client) return;
-      var d = getDB(), cache = storyCache[base] || { stories: [], dead: [] }, mineIds = myIds();
+      var d = getDB(), cache = storyCache[base] || { stories: [], dead: [] };
       var dead = {}; (cache.dead || []).concat(Object.keys(d.deadStories || {})).forEach(function (id) { dead[id] = 1; });
       var byId = {};
-      (cache.stories || []).concat(liveStories(d).filter(function (s) { return mineIds[s.user_id]; })).forEach(function (s) { if (!dead[s.id]) byId[s.id] = s; });
+      // Se juntan las del servidor con TODAS las que conoce este aparato, para no dejar fuera las de nadie
+      (cache.stories || []).concat(storiesForBase(base, d)).forEach(function (s) { if (!dead[s.id]) byId[s.id] = s; });
       var limit = Date.now() - STORY_HOURS * 3600 * 1000;
       var list = Object.keys(byId).map(function (k) { return byId[k]; }).filter(function (s) { return new Date(s.created_at).getTime() > limit; });
       var obj = { stories: list, dead: Object.keys(dead).slice(-300) };
@@ -1087,8 +1102,12 @@
         if (!mineIds[s.user_id]) newFromOthers = s.name;
       });
       if (changedAny) saveDB(d);
+      // Si al servidor le falta alguna story que este aparato sí tiene (de quien sea), se vuelve a subir
       var remote = {}; (obj.stories || []).forEach(function (s) { remote[s.id] = 1; });
-      if (liveStories(d).some(function (s) { return mineIds[s.user_id] && !remote[s.id] && !d.deadStories[s.id]; })) publishStories(base);
+      if (storiesForBase(base, d).some(function (s) { return !remote[s.id] && !d.deadStories[s.id]; })) {
+        clearTimeout(storyFix[base]);
+        storyFix[base] = setTimeout(function () { publishStories(base); }, 500 + Math.random() * 1500);
+      }
       if (changedAny && booted) { renderStories(); if (newFromOthers) flagTab("storyTab"); }
     }
 
@@ -1107,6 +1126,35 @@
   function showScreen(id) {
     ["welcomeScreen", "mainApp"].forEach(function (s) { $(s).style.display = s === id ? "flex" : "none"; });
   }
+
+  // ===== ACTUALIZARSE SOLA (sin Ctrl + F5) =====
+  // Mira la página publicada sin usar la copia guardada del navegador y compara el número de versión
+  var updateShown = false;
+  function busyNow() {
+    return !!call || !!rec || ($("msgInput") && $("msgInput").value.trim()) ||
+      document.querySelector(".modal-backdrop.open, .confirm-backdrop.open, .story-viewer.open");
+  }
+  function goToVersion(v) { location.replace(location.pathname + "?v=" + encodeURIComponent(v)); }
+  function checkUpdate() {
+    if (!/^https?:$/.test(location.protocol) || /claude\.ai|claudeusercontent/.test(location.hostname)) return;
+    fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (html) {
+      var m = html.match(/var APP_VERSION = "([^"]+)"/);
+      if (!m || m[1] === APP_VERSION) return;
+      // Si ya intentamos ir a esa versión y GitHub aún da la vieja, no se recarga en bucle: se espera
+      var tried = null; try { tried = sessionStorage.getItem("cf_upd_tried"); } catch (e) {}
+      if (tried === m[1]) return;
+      if (!busyNow()) { try { sessionStorage.setItem("cf_upd_tried", m[1]); } catch (e) {} goToVersion(m[1]); return; }
+      if (updateShown || document.querySelector(".confirm-backdrop.open")) return;
+      updateShown = true;
+      askConfirm("Hay una versión nueva de la app. ¿Actualizar ahora?", "Actualizar", function () {
+        try { sessionStorage.setItem("cf_upd_tried", m[1]); } catch (e) {}
+        goToVersion(m[1]);
+      }, function () { updateShown = false; }, true);
+    }).catch(function () {});
+  }
+  setInterval(checkUpdate, 60000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) checkUpdate(); });
+  setTimeout(checkUpdate, 3000);
 
   function start() {
     initChatModal(); initSettings(); initStories();
@@ -2569,7 +2617,7 @@
   }
 
   // Reduce la foto para que quepa en el navegador (square: recorte cuadrado, para fotos de perfil)
-  function shrinkImage(file, cb, square) {
+  function shrinkImage(file, cb, square, maxSide) {
     var reader = new FileReader();
     reader.onload = function () {
       var img = new Image();
@@ -2582,7 +2630,7 @@
           cb(c.toDataURL("image/jpeg", 0.8));
           return;
         }
-        var k = Math.min(1, 1080 / Math.max(w, h));
+        var k = Math.min(1, (maxSide || 1080) / Math.max(w, h));
         c.width = Math.round(w * k); c.height = Math.round(h * k);
         g.drawImage(img, 0, 0, c.width, c.height);
         cb(c.toDataURL("image/jpeg", 0.72));
@@ -2620,7 +2668,7 @@
     $("storyPhotoFile").onchange = function () {
       var f = this.files && this.files[0]; this.value = "";
       if (!f) return;
-      shrinkImage(f, function (url) { storyImage = url; storyZoom = 1; storyPan = { x: 0, y: 0 }; updateStoryPreview(); rebuildStoryLayers(); });
+      shrinkImage(f, function (url) { storyImage = url; storyZoom = 1; storyPan = { x: 0, y: 0 }; updateStoryPreview(); rebuildStoryLayers(); }, false, 820);
     };
 
     // Stickers y emojis en la story
