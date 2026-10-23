@@ -200,6 +200,11 @@
   .loading { margin:auto; color:var(--text-soft); font-size:15px; text-align:center; line-height:1.6; padding:20px; }
   .loading .big { font-size:40px; display:block; margin-bottom:6px; }
   .avatar-dot { background-size:cover; background-position:center; }
+  .friend-btn { padding:8px 12px; border-radius:12px; font-weight:600; font-size:13px; flex-shrink:0; background:var(--accent); color:var(--accent-ink); }
+  .friend-btn.soft { background:var(--surface-2); color:var(--text); }
+  .friend-btn.no { background:#FBE3E4; color:#C0392B; }
+  .friend-btn:disabled { opacity:.6; cursor:default; }
+  .friend-actions { display:flex; gap:6px; flex-shrink:0; }
   .member-row { display:flex; align-items:center; gap:12px; padding:8px 4px; border-bottom:1px solid var(--border); }
   .member-row:last-child { border-bottom:none; }
   .member-avatar { width:40px; height:40px; font-size:16px; }
@@ -390,11 +395,24 @@
       </div>
     </div>
 
+    <div class="tab-content" id="friendsTab">
+      <div class="stories-wrap"><div class="stories-inner">
+        <div id="friendsRequestsBox">
+          <div class="section-title">Solicitudes de amistad</div>
+          <div id="friendsRequests"></div>
+        </div>
+        <div class="section-title">Tus amigos</div>
+        <div id="friendsList"></div>
+        <div class="section-title">Gente de tus grupos</div>
+        <div id="friendsOthers"></div>
+      </div></div>
+    </div>
+
     <div class="tab-content" id="storyTab">
       <div class="stories-wrap"><div class="stories-inner">
         <div class="section-title">Tus stories</div>
         <div id="myStories"></div>
-        <div class="section-title">De los demás</div>
+        <div class="section-title">De tus amigos</div>
         <div id="otherStories"></div>
       </div></div>
       <div class="home-actions">
@@ -413,6 +431,7 @@
 
     <div class="bottom-nav">
       <button class="nav-btn active" data-tab="chatTab"><span class="emoji">💬</span>Chats</button>
+      <button class="nav-btn" data-tab="friendsTab"><span class="emoji">👥</span>Amigos</button>
       <button class="nav-btn" data-tab="storyTab"><span class="emoji">⭕</span>Story</button>
       <button class="nav-btn" data-tab="callsTab"><span class="emoji">📞</span>Llamadas</button>
     </div>
@@ -642,7 +661,7 @@
   var CHAT_EMOJIS = ["💬","❤️","🏠","🎉","🐶","⚽","🌈","🍕","✈️","🎮","📚","🌟"];
   var STORY_HOURS = 24;
   // Cambia en cada versión nueva: así la app sabe si en GitHub hay una más reciente y se actualiza sola
-  var APP_VERSION = "2026-10-22.4";
+  var APP_VERSION = "2026-10-23.1";
 
   var $ = function (id) { return document.getElementById(id); };
   function loadJSON(k, fallback) { try { var v = JSON.parse(localStorage.getItem(k)); return v === null || v === undefined ? fallback : v; } catch (e) { return fallback; } }
@@ -798,6 +817,34 @@
       getMine().forEach(function (m) { var c = chatById(m.chat, d); if (c && c.topic) out[c.topic] = 1; });
       return Object.keys(out);
     }
+    // ---- amistades: cada pareja de personas tiene su propio "buzón" con el estado de la solicitud ----
+    var pairSubs = {};
+    function pairInfo(a, b) {
+      var ids = [a, b].sort();
+      return sha256hex("pair|" + ids[0] + "|" + ids[1]).then(function (h) {
+        return { topic: ROOT + "f" + h.slice(0, 40), chatId: "p" + h.slice(0, 16), chatTopic: ROOT + "p" + h.slice(16, 56) };
+      });
+    }
+    function watchPairs() {
+      var who = lastMe(); if (!who) return;
+      knownPeople().forEach(function (p) {
+        pairInfo(who.id, p.id).then(function (t) {
+          if (pairSubs[t.topic]) return;
+          pairSubs[t.topic] = p.id;
+          if (client && connected) client.subscribe(t.topic, { qos: 1 });
+        });
+      });
+    }
+    function sendPair(otherId, obj) {
+      var who = lastMe(); if (!who) return Promise.resolve(false);
+      return pairInfo(who.id, otherId).then(function (t) {
+        if (!client || !connected) return false;
+        pairSubs[t.topic] = otherId;
+        client.publish(t.topic, JSON.stringify(obj), { qos: 1, retain: true });
+        return t;
+      });
+    }
+
     function status() {
       var text = !window.mqtt ? "⚪ Sin conexión al servidor: los chats solo se guardan en este aparato." :
         connected ? "🟢 Conectada: los chats se comparten entre todos los aparatos." : "🟠 Conectando con el servidor…";
@@ -822,6 +869,8 @@
       } catch (e) { client = null; status(); return; }
       client.on("connect", function () {
         connected = true; Object.keys(subs).forEach(subscribeAll); status();
+        Object.keys(pairSubs).forEach(function (t) { client.subscribe(t, { qos: 1 }); });
+        watchPairs();
         // Nada más conectarse se pregunta quién está, para que aparezcan ya en Llamadas
         setTimeout(function () { if (booted) { bus.send({ type: "hello" }); announce(); } }, 400);
       });
@@ -854,6 +903,7 @@
         if (!want[b]) { delete subs[b]; if (client) client.unsubscribe([b + "/state", b + "/live", b + "/media/+", b + "/stories"]); }
       });
       Object.keys(want).forEach(watch);
+      watchPairs();
     }
 
     // Busca si en esa dirección ya hay un chat guardado. undefined = sin conexión, null = no hay nada
@@ -870,6 +920,13 @@
 
     function onMessage(topic, payload) {
       var parts = topic.split("/"), base = parts.slice(0, 3).join("/"), kind = parts[3], text = payload.toString();
+      if (parts.length === 3) {
+        // Buzón de amistad entre dos personas
+        var otherId = pairSubs[topic]; if (!otherId) return;
+        var obj = null; try { obj = text ? JSON.parse(text) : null; } catch (e) {}
+        applyPair(otherId, obj);
+        return;
+      }
       if (kind === "state") {
         var st = null; try { st = text ? JSON.parse(text) : null; } catch (e) {}
         received[base] = 1;
@@ -1069,6 +1126,7 @@
 
       saveDB(d);
       if (needPublish) changed(c.id);
+      watchPairs();
       if (!booted || !identityFor(c.id)) return;
       refreshMembersIfOpen();
       if (currentChat === c.id) {
@@ -1077,7 +1135,7 @@
         if (activeTab() === "chatTab") markSeen();
       } else renderChatsHome();
       if (newFromOthers) {
-        if (currentChat && currentChat !== c.id) toast("💬 " + lastName + " en " + c.name);
+        if (currentChat && currentChat !== c.id) toast("💬 " + lastName + (c.private ? " (privado)" : " en " + c.name));
         flagTab("chatTab");
       }
     }
@@ -1091,6 +1149,8 @@
     }
     function publishStories(base) {
       if (!client) return;
+      // Las stories solo se comparten con amigos (por su chat privado)
+      var pc = chatOf(base); if (!pc || !pc.private) return;
       var d = getDB(), cache = storyCache[base] || { stories: [], dead: [] };
       var dead = {}; (cache.dead || []).concat(Object.keys(d.deadStories || {})).forEach(function (id) { dead[id] = 1; });
       var byId = {};
@@ -1109,6 +1169,7 @@
       });
     }
     function applyStories(base, obj) {
+      var sc = chatOf(base); if (!sc || !sc.private) return;
       storyCache[base] = obj;
       var d = getDB(), have = {}, changedAny = false, newFromOthers = "";
       d.deadStories = d.deadStories || {};
@@ -1135,6 +1196,7 @@
       connect: connect, sync: sync, find: find, topicFor: topicFor, live: live,
       changed: changed, publishAll: publishAll, sendMedia: sendMedia, dropMedia: dropMedia,
       pushStories: pushStories, publishStories: publishStories,
+      pairInfo: pairInfo, sendPair: sendPair, watchPairs: watchPairs,
       isOnline: function () { return !!(client && connected); },
       deleteRemote: function (base, moved) { if (client && base) client.publish(base + "/state", JSON.stringify(moved ? { moved: true } : { deleted: true }), { qos: 1, retain: true }); },
       maxMedia: MAX_MEDIA, status: status
@@ -1201,6 +1263,8 @@
     closeChat();
     renderCallLog();
     renderStories();
+    renderFriends();
+    cloud.watchPairs();
     announce();
   }
 
@@ -1226,7 +1290,8 @@
         var inChat = tab === "chatTab" && currentChat;
         $("backBtn").style.display = inChat ? "" : "none";
         $("chatMenuBtn").style.display = inChat ? "" : "none";
-        $("groupNameLabel").textContent = tab === "callsTab" ? "Llamadas" : tab === "storyTab" ? "Story" : chatTitle();
+        $("groupNameLabel").textContent = tab === "callsTab" ? "Llamadas" : tab === "storyTab" ? "Story" : tab === "friendsTab" ? "Amigos" : chatTitle();
+        if (tab === "friendsTab") { cloud.watchPairs(); renderFriends(); }
         if (inChat) { requestAnimationFrame(resizeCanvas); var l = $("chatList"); l.scrollTop = l.scrollHeight; markSeen(); }
         else if (tab === "chatTab") renderChatsHome();
         else if (tab === "storyTab") renderStories();
@@ -1237,10 +1302,189 @@
   function goTab(tab) { var b = document.querySelector('.nav-btn[data-tab="' + tab + '"]'); if (b && !b.classList.contains("active")) b.click(); }
   function flagTab(tab) { if (activeTab() !== tab) document.querySelector('.nav-btn[data-tab="' + tab + '"]').classList.add("has-new"); }
 
+  // ===== AMIGOS =====
+  // Solicitud → la otra persona acepta → chat privado entre los dos + ver sus stories
+  function myFriendId() { var w = lastMe(); return w ? w.id : null; }
+  function friendsMap() { return getDB().friends || {}; }
+  function isFriend(uid) { var f = friendsMap()[uid]; return !!(f && f.status === "accepted"); }
+
+  // Toda la gente que comparte algún chat conmigo (sin contarme a mí)
+  function knownPeople() {
+    var d = getDB(), mineIds = myIds(), chatIds = {}, ids = {};
+    getMine().forEach(function (m) { chatIds[m.chat] = 1; });
+    d.chat_members.forEach(function (m) { if (chatIds[m.chat_id] && !mineIds[m.user_id]) ids[m.user_id] = 1; });
+    return d.profiles.filter(function (p) { return ids[p.id]; });
+  }
+  function groupsOf(uid, d) {
+    var chatIds = {}; getMine().forEach(function (m) { chatIds[m.chat] = 1; });
+    var inChats = {}; d.chat_members.forEach(function (m) { if (m.user_id === uid && chatIds[m.chat_id]) inChats[m.chat_id] = 1; });
+    return d.chats.filter(function (c) { return inChats[c.id] && !c.private; }).map(function (c) { return c.name; });
+  }
+
+  // Nombre que se ve de un chat: en los privados, el nombre de la otra persona
+  function otherInPrivate(c, d) {
+    d = d || getDB();
+    var mine = identityFor(c.id), mineIds = myIds();
+    var m = d.chat_members.filter(function (x) { return x.chat_id === c.id && (!mine || x.user_id !== mine.id) && !mineIds[x.user_id]; })[0];
+    return m ? d.profiles.filter(function (p) { return p.id === m.user_id; })[0] || null : null;
+  }
+  function chatName(c, d) {
+    if (!c.private) return c.name;
+    var o = otherInPrivate(c, d);
+    return o ? o.name : "Chat privado";
+  }
+
+  var friendNotified = {};
+  function applyPair(otherId, obj) {
+    var d = getDB(); d.friends = d.friends || {};
+    var prev = d.friends[otherId] || null, meId = myFriendId();
+    var who = d.profiles.filter(function (p) { return p.id === otherId; })[0];
+    var name = who ? who.name : (obj && obj.fromName) || "Alguien";
+    if (!obj || !obj.status) { delete d.friends[otherId]; saveDB(d); renderFriends(); return; }
+    d.friends[otherId] = obj;
+    saveDB(d);
+    var key = otherId + "|" + obj.status + "|" + obj.at;
+    var fresh = !friendNotified[key] && (!prev || prev.at !== obj.at || prev.status !== obj.status);
+    friendNotified[key] = 1;
+    if (obj.status === "accepted" && obj.chat) {
+      ensurePrivateChat(otherId, obj);
+      if (fresh && obj.by !== meId && prev && prev.status === "pending") toast("🎉 " + name + " ha aceptado tu solicitud de amistad");
+    } else if (obj.status === "pending" && obj.to === meId) {
+      if (fresh) { toast("👋 " + name + " quiere ser tu amigo/a"); flagTab("friendsTab"); }
+    } else if (obj.status === "rejected" && obj.by !== meId && fresh && prev && prev.status === "pending") {
+      toast(name + " ha rechazado tu solicitud");
+    } else if (obj.status === "removed") {
+      removePrivateChatLocal(otherId, obj);
+    }
+    updateFriendsBadge();
+    if (booted) { renderFriends(); renderStories(); }
+  }
+
+  function ensurePrivateChat(otherId, obj) {
+    var d = getDB(), me0 = lastMe(); if (!me0) return;
+    var c = chatById(obj.chat.id, d), now = new Date().toISOString();
+    if (!c) {
+      c = { id: obj.chat.id, name: "Privado", emoji: "👤", private: true, pass_hash: "", created_by: obj.from, created_at: obj.at || now, updated_at: obj.at || now, topic: obj.chat.topic };
+      d.chats.push(c);
+    }
+    c.private = true; c.topic = obj.chat.topic;
+    [me0.id, otherId].forEach(function (uid) {
+      if (!d.chat_members.some(function (m) { return m.chat_id === c.id && m.user_id === uid; })) d.chat_members.push({ chat_id: c.id, user_id: uid, joined_at: now });
+    });
+    if (!d.profiles.some(function (p) { return p.id === otherId; }) && obj.fromName) d.profiles.push({ id: otherId, name: obj.fromName, color: obj.fromColor || "#999" });
+    saveDB(d);
+    if (!identityFor(c.id)) {
+      var mine = getMine(); mine.push({ chat: c.id, user: me0 }); saveMine(mine);
+      cloud.sync(); cloud.changed(c.id);
+      setTimeout(function () { cloud.pushStories(); }, 1500);
+    }
+    if (booted) renderChatsHome();
+  }
+
+  function removePrivateChatLocal(otherId, obj) {
+    var d = getDB(), cid = obj && obj.chat && obj.chat.id;
+    if (!cid) return;
+    var c = chatById(cid, d); if (!c) return;
+    d.chats = d.chats.filter(function (x) { return x.id !== cid; });
+    ["chat_members", "messages", "strokes"].forEach(function (t) { d[t] = d[t].filter(function (r) { return r.chat_id !== cid; }); });
+    saveDB(d); forgetChat(cid); cloud.sync();
+    if (booted) afterMineChanged();
+  }
+
+  function sendFriendRequest(p) {
+    var me0 = lastMe(); if (!me0) return;
+    if (!cloud.isOnline()) { toast("Hace falta conexión (🟢) para mandar solicitudes"); return; }
+    var obj = { status: "pending", from: me0.id, fromName: me0.name, fromColor: me0.color, to: p.id, by: me0.id, at: new Date().toISOString() };
+    cloud.sendPair(p.id, obj).then(function (ok) {
+      if (!ok) { toast("No se pudo mandar. Revisa la conexión."); return; }
+      applyPair(p.id, obj);
+      toast("Solicitud enviada a " + p.name);
+    });
+  }
+  function answerFriendRequest(p, accept) {
+    var me0 = lastMe(), cur = friendsMap()[p.id]; if (!me0 || !cur) return;
+    if (!cloud.isOnline()) { toast("Hace falta conexión (🟢) para contestar"); return; }
+    cloud.pairInfo(me0.id, p.id).then(function (t) {
+      var obj = { status: accept ? "accepted" : "rejected", from: cur.from, fromName: cur.fromName, fromColor: cur.fromColor, to: cur.to, by: me0.id, at: new Date().toISOString() };
+      if (accept) obj.chat = { id: t.chatId, topic: t.chatTopic };
+      cloud.sendPair(p.id, obj).then(function () {
+        applyPair(p.id, obj);
+        if (accept) toast("Ahora " + p.name + " y tú sois amigos. Tenéis un chat privado 💬");
+      });
+    });
+  }
+
+  function updateFriendsBadge() {
+    var meId = myFriendId(), f = friendsMap();
+    var pending = Object.keys(f).some(function (k) { return f[k].status === "pending" && f[k].to === meId; });
+    var btn = document.querySelector('.nav-btn[data-tab="friendsTab"]');
+    if (btn) btn.classList.toggle("has-new", pending && activeTab() !== "friendsTab");
+  }
+
+  function friendRow(p, d, sub, actions) {
+    var row = document.createElement("div"); row.className = "person-row";
+    var dot = document.createElement("div"); dot.className = "avatar-dot"; paintAvatar(dot, p.id, p.name, p.color, d);
+    var info = document.createElement("div"); info.className = "pname";
+    info.textContent = p.name;
+    var sm = document.createElement("small"); sm.textContent = sub; info.appendChild(sm);
+    var act = document.createElement("div"); act.className = "friend-actions";
+    actions.forEach(function (a) {
+      var b = document.createElement("button"); b.className = "friend-btn" + (a.cls ? " " + a.cls : ""); b.textContent = a.text;
+      if (a.disabled) b.disabled = true; else b.onclick = a.fn;
+      act.appendChild(b);
+    });
+    row.appendChild(dot); row.appendChild(info); row.appendChild(act);
+    return row;
+  }
+
+  function renderFriends() {
+    if (!$("friendsList")) return;
+    var d = getDB(), meId = myFriendId(), f = d.friends || {};
+    var people = knownPeople();
+    // También cuentan quienes ya son amigos o me han escrito aunque ya no compartamos grupo
+    Object.keys(f).forEach(function (uid) {
+      if (!people.some(function (p) { return p.id === uid; })) {
+        var p = d.profiles.filter(function (x) { return x.id === uid; })[0] || (f[uid].fromName && f[uid].from === uid ? { id: uid, name: f[uid].fromName, color: f[uid].fromColor } : null);
+        if (p && !myIds()[p.id]) people.push(p);
+      }
+    });
+    people.sort(function (a, b) { return a.name.localeCompare(b.name); });
+    var reqBox = $("friendsRequests"), friendsBox = $("friendsList"), othersBox = $("friendsOthers");
+    reqBox.innerHTML = ""; friendsBox.innerHTML = ""; othersBox.innerHTML = "";
+    var nReq = 0, nFriends = 0, nOthers = 0;
+    people.forEach(function (p) {
+      var st = f[p.id], groups = groupsOf(p.id, d), where = groups.length ? "En: " + groups.join(", ") : "";
+      if (st && st.status === "pending" && st.to === meId) {
+        nReq++;
+        reqBox.appendChild(friendRow(p, d, "Quiere ser tu amigo/a" + (where ? " · " + where : ""), [
+          { text: "✔ Aceptar", fn: function () { answerFriendRequest(p, true); } },
+          { text: "✖", cls: "no", fn: function () { answerFriendRequest(p, false); } }
+        ]));
+      } else if (st && st.status === "accepted") {
+        nFriends++;
+        friendsBox.appendChild(friendRow(p, d, "Amigos · podéis ver vuestras stories", [
+          { text: "💬 Chat", fn: function () { if (st.chat) { ensurePrivateChat(p.id, st); openChat(st.chat.id); } } }
+        ]));
+      } else {
+        nOthers++;
+        var sent = st && st.status === "pending" && st.from === meId;
+        var rejected = st && st.status === "rejected" && st.by !== meId;
+        othersBox.appendChild(friendRow(p, d, rejected ? "Rechazó tu solicitud" + (where ? " · " + where : "") : where, [
+          sent ? { text: "⏳ Enviada", cls: "soft", disabled: true }
+               : { text: rejected ? "➕ Volver a pedir" : "➕ Añadir", fn: function () { sendFriendRequest(p); } }
+        ]));
+      }
+    });
+    $("friendsRequestsBox").style.display = nReq ? "block" : "none";
+    if (!nFriends) friendsBox.innerHTML = '<div class="empty-state" style="padding:14px">Aún no tienes amigos. Añade a alguien de tus grupos 👇</div>';
+    if (!nOthers) othersBox.innerHTML = '<div class="empty-state" style="padding:14px">' + (people.length ? "Ya has añadido a todos." : "Cuando haya más gente en tus chats, aparecerá aquí.") + "</div>";
+    updateFriendsBadge();
+  }
+
   // ===== LISTA DE CHATS =====
   function chatById(id, d) { return (d || getDB()).chats.filter(function (c) { return c.id === id; })[0] || null; }
   function myChats(d) { var ids = {}; getMine().forEach(function (m) { ids[m.chat] = true; }); return (d || getDB()).chats.filter(function (c) { return ids[c.id]; }); }
-  function chatTitle() { var c = currentChat && chatById(currentChat); return c ? c.emoji + " " + c.name : "Chats"; }
+  function chatTitle() { var c = currentChat && chatById(currentChat); return c ? (c.private ? "👤 " : c.emoji + " ") + chatName(c) : "Chats"; }
   function isOwner(c) { var u = identityFor(c.id); return !!u && c.created_by === u.id; }
   function markSeen() {
     if (!currentChat) return;
@@ -1267,8 +1511,15 @@
       row.innerHTML = '<div class="chat-icon"></div><div class="chat-info"><div class="cname"></div><div class="last"></div></div>' +
         (unread ? '<span class="unread-dot"></span>' : "") + '<span class="chat-when">' + (last ? fmtWhen(last.created_at) : "") + "</span>" +
         '<button class="row-del" title="' + (isOwner(c) ? "Borrar chat" : "Salir del chat") + '">🗑️</button>';
-      row.querySelector(".chat-icon").textContent = c.emoji || "💬";
-      row.querySelector(".cname").textContent = c.name;
+      var icon = row.querySelector(".chat-icon");
+      if (c.private) {
+        // Chat privado: se ve la foto o la inicial de la otra persona
+        var other = otherInPrivate(c, d);
+        icon.classList.add("avatar-dot");
+        if (other) paintAvatar(icon, other.id, other.name, other.color, d); else icon.textContent = "👤";
+        icon.style.color = "#fff";
+      } else icon.textContent = c.emoji || "💬";
+      row.querySelector(".cname").textContent = chatName(c, d) + (c.private ? " 🔒" : "");
       row.querySelector(".last").textContent = preview;
       row.onclick = function () { openChat(c.id); };
       row.onkeydown = function (e) { if (e.key === "Enter") openChat(c.id); };
@@ -1312,8 +1563,27 @@
     else renderChatsHome();
   }
 
+  // Borrar un chat privado: se borra para los dos y dejáis de ser amigos (se puede volver a pedir)
+  function removePrivateChat(c) {
+    var other = otherInPrivate(c), name = other ? other.name : "esa persona";
+    askConfirm("¿Borrar el chat privado con " + name + "? Se borra para los dos y dejaréis de ser amigos (podréis volver a añadiros).", "Borrar", function () {
+      var me0 = lastMe(), st = other ? friendsMap()[other.id] : null;
+      if (c.topic) cloud.deleteRemote(c.topic, false);
+      if (other && me0) {
+        var obj = { status: "removed", from: (st && st.from) || me0.id, to: (st && st.to) || other.id, by: me0.id, at: new Date().toISOString(), chat: { id: c.id, topic: c.topic } };
+        cloud.sendPair(other.id, obj);
+        var d0 = getDB(); d0.friends = d0.friends || {}; d0.friends[other.id] = obj; saveDB(d0);
+      }
+      removePrivateChatLocal(other ? other.id : null, { chat: { id: c.id } });
+      closeChatModal();
+      renderFriends(); renderStories();
+      toast("Chat privado borrado");
+    });
+  }
+
   // Quien creó el chat lo borra para todos; los demás solo salen de él
   function removeChat(c) {
+    if (c.private) { removePrivateChat(c); return; }
     var owner = isOwner(c), u = identityFor(c.id);
     var question = owner
       ? "¿Borrar el chat «" + c.name + "» para todos? Se perderán sus mensajes y dibujos."
@@ -1380,8 +1650,19 @@
     $("chatError").textContent = "";
     buildPicker("chatEmojiRow", CHAT_EMOJIS, pickedEmoji, "emoji-pick", function (v) { pickedEmoji = v; });
     buildPicker("colorSwatchRow", USER_COLORS, pickedColor, "swatch", function (v) { pickedColor = v; }, true);
+    // Chat privado de amigos: no tiene nombre ni contraseña que cambiar
+    var priv = !!(chat && chat.private);
+    $("chatNameInput").parentElement.style.display = priv ? "none" : "";
+    $("chatPassInput").parentElement.style.display = priv ? "none" : "";
+    if (priv) {
+      $("chatEmojiField").style.display = "none";
+      $("chatSaveBtn").style.display = "none";
+      $("chatModalTitle").textContent = "Chat privado";
+      $("chatModalLead").textContent = "Solo lo veis vosotros dos, porque sois amigos.";
+      $("chatDeleteBtn").textContent = "🗑️ Borrar chat privado (dejaréis de ser amigos)";
+    } else $("chatSaveBtn").style.display = "";
     $("chatModal").classList.add("open");
-    setTimeout(function () { $("chatNameInput").focus(); }, 50);
+    if (!priv) setTimeout(function () { $("chatNameInput").focus(); }, 50);
   }
   function closeChatModal() { $("chatModal").classList.remove("open"); }
 
@@ -2489,9 +2770,10 @@
     pruneStories();
     var all = liveStories(), mineIds = myIds(), seen = loadJSON("cf_story_seen", {});
     var mineGroups = groupStories(all.filter(function (s) { return mineIds[s.user_id]; }));
-    var otherGroups = groupStories(all.filter(function (s) { return !mineIds[s.user_id]; }));
-    fillStoryList($("myStories"), mineGroups, seen, '<div class="info-card">Aún no has publicado ninguna story. Toca <b>＋ Publicar story</b> para compartir un texto o una foto. Se borra sola a las 24 horas.</div>', true);
-    fillStoryList($("otherStories"), otherGroups, seen, '<div class="empty-state" style="padding:16px">Nadie más ha publicado stories hoy.</div>', false);
+    // Solo se ven las stories de tus amigos
+    var otherGroups = groupStories(all.filter(function (s) { return !mineIds[s.user_id] && isFriend(s.user_id); }));
+    fillStoryList($("myStories"), mineGroups, seen, '<div class="info-card">Aún no has publicado ninguna story. Toca <b>＋ Publicar story</b> para compartir un texto o una foto. La verán tus amigos y se borra sola a las 24 horas.</div>', true);
+    fillStoryList($("otherStories"), otherGroups, seen, '<div class="empty-state" style="padding:16px">Tus amigos no han publicado stories hoy.<br>Añade amigos en la pestaña 👥 Amigos para ver las suyas.</div>', false);
   }
 
   function fillStoryList(box, groups, seen, emptyHtml, mine) {
@@ -3186,7 +3468,7 @@
         if (!booted || !identityFor(m.chatId)) break;
         if (m.chatId === currentChat) { renderAllMessages(); if (activeTab() === "chatTab") markSeen(); }
         else if (!currentChat) renderChatsHome();
-        else if (m.type === "msg") { var c = chatById(m.chatId); if (c) toast("💬 " + m.name + " en " + c.name); }
+        else if (m.type === "msg") { var c = chatById(m.chatId); if (c) toast("💬 " + m.name + (c.private ? " (privado)" : " en " + c.name)); }
         if (m.type === "msg") flagTab("chatTab");
         break;
       case "chats":
